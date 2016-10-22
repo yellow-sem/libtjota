@@ -1,27 +1,51 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
-#include <netdb.h>
+#include <stdbool.h>
+#include <regex.h>
+#include <glib.h>
 
-#include "config.h"
+#include "conn.h"
 
 struct tm_handler
 {
+    const char *regex_s;
+    regex_t *regex_c;
+    void (*handle)(int argc, char **argv);
+};
+
+struct tm_handler *tm_handler_new();
+void tm_handler_free(struct tm_handler *handler);
+
+struct tm_request
+{
+    char *command;
+    char *ident;
+    char *args[];
+};
+
+struct tm_response
+{
+    char *command;
+    char *ident;
+    bool ok;
 };
 
 struct tm_client
 {
-    struct hostent *hostent;
-    int sockfd;
+    struct tm_conn *conn;
+    struct tm_handler **handler;
+
+    GHashTable *table;
 };
 
-struct tm_client *tm_client_new();
-void tm_client_free(struct tm_client *client);
+void tm_client_send(struct tm_client *client,
+                    struct tm_request *request);
 
-struct tm_client *tm_client_connect(struct tm_config *config);
-void tm_client_disconnect(struct tm_client *client);
+struct tm_response *tm_client_poll(struct tm_client *client,
+                                   struct tm_request *request);
 
-char *tm_client_read(struct tm_client *client);
-void tm_client_write(struct tm_client *client, const char *data);
+struct tm_response *tm_client_wait(struct tm_client *client,
+                                   struct tm_request *request);
 
 #endif
