@@ -13,9 +13,9 @@ struct tm_conn *tm_conn_new()
     return malloc(sizeof(struct tm_conn));
 }
 
-void tm_conn_free(struct tm_conn *client)
+void tm_conn_free(struct tm_conn *conn)
 {
-    free(client);
+    free(conn);
 }
 
 struct tm_conn *tm_conn_open(struct tm_config *config)
@@ -55,22 +55,22 @@ struct tm_conn *tm_conn_open(struct tm_config *config)
         return NULL;
     }
 
-    struct tm_conn *client = tm_conn_new();
-    client->hostent = hostent;
-    client->sockfd = sockfd;
-    return client;
+    struct tm_conn *conn = tm_conn_new();
+    conn->hostent = hostent;
+    conn->sockfd = sockfd;
+    return conn;
 }
 
-void tm_conn_close(struct tm_conn *client)
+void tm_conn_close(struct tm_conn *conn)
 {
-    close(client->sockfd);
-    tm_conn_free(client);
+    close(conn->sockfd);
+    tm_conn_free(conn);
 }
 
-char *tm_conn_read(struct tm_conn *client)
+char *tm_conn_read(struct tm_conn *conn)
 {
     static char in[4096];
-    ssize_t length = read(client->sockfd, in, sizeof(in));
+    ssize_t length = read(conn->sockfd, in, sizeof(in));
 
     char *data = malloc(sizeof(char) * length);
     memcpy(data, in, length);
@@ -79,7 +79,7 @@ char *tm_conn_read(struct tm_conn *client)
     return data;
 }
 
-void tm_conn_write(struct tm_conn *client, const char *data)
+void tm_conn_write(struct tm_conn *conn, const char *data)
 {
-    write(client->sockfd, data, strlen(data));
+    write(conn->sockfd, data, strlen(data));
 }
