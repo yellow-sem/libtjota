@@ -18,7 +18,7 @@ void tm_conn_free(struct tm_conn *client)
     free(client);
 }
 
-struct tm_conn *tm_conn_connect(struct tm_config *config)
+struct tm_conn *tm_conn_open(struct tm_config *config)
 {
     struct hostent *hostent = gethostbyname(config->host);
     if (hostent == NULL) {
@@ -61,7 +61,7 @@ struct tm_conn *tm_conn_connect(struct tm_config *config)
     return client;
 }
 
-void tm_conn_disconnect(struct tm_conn *client)
+void tm_conn_close(struct tm_conn *client)
 {
     close(client->sockfd);
     tm_conn_free(client);

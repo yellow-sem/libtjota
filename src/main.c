@@ -13,7 +13,7 @@ int main(int argc, const char *argv[]) {
 
     struct tm_config *config = tm_config_load(CONFIG_PATH);
 
-    struct tm_conn *client = tm_conn_connect(config);
+    struct tm_conn *client = tm_conn_open(config);
     if (client != NULL) {
 
         char* data = tm_conn_read(client);
@@ -26,7 +26,7 @@ int main(int argc, const char *argv[]) {
 
         tm_conn_write(client, "sys:exit");
 
-        tm_conn_disconnect(client);
+        tm_conn_close(client);
     }
 
     tm_config_free(config);
