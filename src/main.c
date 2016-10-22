@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "log.h"
 #include "config.h"
@@ -12,6 +13,17 @@ int main(int argc, const char *argv[]) {
 
     struct tm_client *client = tm_client_connect(config);
     if (client != NULL) {
+
+        char* data = tm_client_read(client);
+        free(data);
+
+        tm_client_write(client, "auth:login 1234 asdf@yellow 1234");
+        data = tm_client_read(client);
+        printf("> %s\n", data);
+        free(data);
+
+        tm_client_write(client, "sys:exit");
+
         tm_client_disconnect(client);
     }
 

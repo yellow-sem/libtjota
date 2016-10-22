@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "log.h"
 #include "config.h"
@@ -66,7 +67,19 @@ void tm_client_disconnect(struct tm_client *client)
     tm_client_free(client);
 }
 
-void tm_client_set_handler(struct tm_client *client,
-                           struct tm_handler *handler)
+char *tm_client_read(struct tm_client *client)
 {
+    static char in[4096];
+    ssize_t length = read(client->sockfd, in, sizeof(in));
+
+    char *data = malloc(sizeof(char) * length);
+    memcpy(data, in, length);
+    data[length - 1] = '\0';
+
+    return data;
+}
+
+void tm_client_write(struct tm_client *client, const char *data)
+{
+    write(client->sockfd, data, strlen(data));
 }

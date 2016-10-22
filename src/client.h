@@ -21,7 +21,7 @@ void tm_client_free(struct tm_client *client);
 struct tm_client *tm_client_connect(struct tm_config *config);
 void tm_client_disconnect(struct tm_client *client);
 
-void tm_client_set_handler(struct tm_client *client,
-                           struct tm_handler *handler);
+char *tm_client_read(struct tm_client *client);
+void tm_client_write(struct tm_client *client, const char *data);
 
 #endif
