@@ -42,18 +42,18 @@ bool tm_config_check_key(GKeyFile *file,
     return false;
 }
 
-struct tm_config *tm_config_new()
+tm_config *tm_config_new()
 {
-    return malloc(sizeof(struct tm_config));
+    return malloc(sizeof(tm_config));
 }
 
-struct tm_config *tm_config_free(struct tm_config *config)
+tm_config *tm_config_free(tm_config *config)
 {
     free(config->host);
     free(config);
 }
 
-struct tm_config *tm_config_load(const char *path)
+tm_config *tm_config_load(const char *path)
 {
     GKeyFile *file = g_key_file_new();
     GError *error = NULL;
@@ -76,7 +76,7 @@ struct tm_config *tm_config_load(const char *path)
         return NULL;
     }
 
-    struct tm_config *config = tm_config_new();
+    tm_config *config = tm_config_new();
 
     bool success = true;
 

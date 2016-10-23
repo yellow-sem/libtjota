@@ -3,12 +3,12 @@
 #include <stdlib.h>
 #include <glib.h>
 
-struct tm_client *tm_client_new(struct tm_conn *conn,
-                                struct tm_handler **handlers,
-                                void (*on_read)(char *data),
-                                void (*on_write)(char *data))
+tm_client *tm_client_new(tm_conn *conn,
+                         tm_handler **handlers,
+                         void (*on_read)(char *data),
+                         void (*on_write)(char *data))
 {
-    struct tm_client *client = malloc(sizeof(struct tm_client));
+    tm_client *client = malloc(sizeof(tm_client));
 
     client->conn = conn;
     client->handlers = handlers;
@@ -23,7 +23,7 @@ struct tm_client *tm_client_new(struct tm_conn *conn,
     return client;
 }
 
-void tm_client_free(struct tm_client *client)
+void tm_client_free(tm_client *client)
 {
     g_async_queue_unref(client->queue);
     g_hash_table_unref(client->table);
@@ -32,10 +32,10 @@ void tm_client_free(struct tm_client *client)
 
 void *tm_client_thread_routine_outgoing(void *_client)
 {
-    struct tm_client *client = _client;
+    tm_client *client = _client;
 
     do {
-        struct tm_request *request = g_async_queue_try_pop(client->queue);
+        tm_request *request = g_async_queue_try_pop(client->queue);
         if (request == NULL) {
             continue;
         }
@@ -50,7 +50,7 @@ void *tm_client_thread_routine_outgoing(void *_client)
 
 void *tm_client_thread_routine_incoming(void *_client)
 {
-    struct tm_client *client = _client;
+    tm_client *client = _client;
 
     do {
         bool select = tm_conn_select(client->conn);
@@ -66,14 +66,14 @@ void *tm_client_thread_routine_incoming(void *_client)
         bool match = false;
 
         int i = 0;
-        struct tm_handler *handler = client->handlers[i];
+        tm_handler *handler = client->handlers[i];
         while (handler != NULL) {
             match |= tm_handler_handle(handler, data);
             handler = client->handlers[++i];
         }
 
         if (!match) {
-            struct tm_response *response = tm_response_decode(data);
+            tm_response *response = tm_response_decode(data);
             if (response != NULL) {
                 g_mutex_lock(&client->mutex);
                 g_hash_table_insert(client->table, response->ident, response);
@@ -87,7 +87,7 @@ void *tm_client_thread_routine_incoming(void *_client)
     } while (client->run);
 }
 
-void tm_client_start(struct tm_client *client)
+void tm_client_start(tm_client *client)
 {
     client->run = true;
 
@@ -102,7 +102,7 @@ void tm_client_start(struct tm_client *client)
                    client);
 }
 
-void tm_client_stop(struct tm_client *client)
+void tm_client_stop(tm_client *client)
 {
     client->run = false;
 
@@ -110,16 +110,16 @@ void tm_client_stop(struct tm_client *client)
     pthread_join(client->thread_incoming, NULL);
 }
 
-void tm_client_send(struct tm_client *client,
-                    struct tm_request *request)
+void tm_client_send(tm_client *client,
+                    tm_request *request)
 {
     g_async_queue_push(client->queue, request);
 }
 
-struct tm_response *tm_client_poll(struct tm_client *client,
-                                   struct tm_request *request)
+tm_response *tm_client_poll(tm_client *client,
+                            tm_request *request)
 {
-    struct tm_response *response;
+    tm_response *response;
 
     g_mutex_lock(&client->mutex);
     response = g_hash_table_lookup(client->table, request->ident);
@@ -131,10 +131,10 @@ struct tm_response *tm_client_poll(struct tm_client *client,
     return response;
 }
 
-struct tm_response *tm_client_wait(struct tm_client *client,
-                                   struct tm_request *request)
+tm_response *tm_client_wait(tm_client *client,
+                            tm_request *request)
 {
-    struct tm_response *response = NULL;
+    tm_response *response = NULL;
 
     do {
         response = tm_client_poll(client, request);

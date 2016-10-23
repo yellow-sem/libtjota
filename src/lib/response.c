@@ -6,9 +6,9 @@
 
 #include "regex.h"
 
-struct tm_response *tm_response_decode(char *data)
+tm_response *tm_response_decode(char *data)
 {
-    struct tm_response *response = NULL;
+    tm_response *response = NULL;
 
     regex_t *regex = tm_regex_compile("([^ ]*) ([^ ]*) ([^ ]*)");
 
@@ -18,7 +18,7 @@ struct tm_response *tm_response_decode(char *data)
     bool match = tm_regex_match(regex, data, &argc, &argv);
 
     if (match) {
-        response = malloc(sizeof(struct tm_response));
+        response = malloc(sizeof(tm_response));
 
         response->command = malloc(strlen(argv[1]) + 1);
         response->ident = malloc(strlen(argv[2]) + 1);
@@ -45,7 +45,7 @@ struct tm_response *tm_response_decode(char *data)
     return response;
 }
 
-void tm_response_free(struct tm_response *response)
+void tm_response_free(tm_response *response)
 {
     free(response->command);
     free(response->ident);

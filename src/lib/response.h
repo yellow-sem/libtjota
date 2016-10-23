@@ -3,15 +3,15 @@
 
 #include <stdbool.h>
 
-struct tm_response
+typedef struct
 {
     char *command;
     char *ident;
     char *value;
     bool ok;
-};
+} tm_response;
 
-struct tm_response *tm_response_decode(char *data);
-void tm_response_free(struct tm_response *response);
+tm_response *tm_response_decode(char *data);
+void tm_response_free(tm_response *response);
 
 #endif

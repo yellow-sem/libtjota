@@ -8,17 +8,17 @@
 #include "log.h"
 #include "config.h"
 
-struct tm_conn *tm_conn_new()
+tm_conn *tm_conn_new()
 {
-    return malloc(sizeof(struct tm_conn));
+    return malloc(sizeof(tm_conn));
 }
 
-void tm_conn_free(struct tm_conn *conn)
+void tm_conn_free(tm_conn *conn)
 {
     free(conn);
 }
 
-struct tm_conn *tm_conn_open(struct tm_config *config)
+tm_conn *tm_conn_open(tm_config *config)
 {
     struct hostent *hostent = gethostbyname(config->host);
     if (hostent == NULL) {
@@ -55,19 +55,19 @@ struct tm_conn *tm_conn_open(struct tm_config *config)
         return NULL;
     }
 
-    struct tm_conn *conn = tm_conn_new();
+    tm_conn *conn = tm_conn_new();
     conn->hostent = hostent;
     conn->sockfd = sockfd;
     return conn;
 }
 
-void tm_conn_close(struct tm_conn *conn)
+void tm_conn_close(tm_conn *conn)
 {
     close(conn->sockfd);
     tm_conn_free(conn);
 }
 
-bool tm_conn_select(struct tm_conn *conn)
+bool tm_conn_select(tm_conn *conn)
 {
     fd_set fd_set;
     FD_ZERO(&fd_set);
@@ -80,7 +80,7 @@ bool tm_conn_select(struct tm_conn *conn)
     return select(conn->sockfd + 1, &fd_set, NULL, NULL, &timeout) > 0;
 }
 
-char *tm_conn_read(struct tm_conn *conn)
+char *tm_conn_read(tm_conn *conn)
 {
     static char in[4096];
     ssize_t length = read(conn->sockfd, in, sizeof(in));
@@ -96,7 +96,7 @@ char *tm_conn_read(struct tm_conn *conn)
     }
 }
 
-void tm_conn_write(struct tm_conn *conn, const char *data)
+void tm_conn_write(tm_conn *conn, const char *data)
 {
     write(conn->sockfd, data, strlen(data));
 }
