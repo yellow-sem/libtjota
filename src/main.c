@@ -1,11 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "lib/log.h"
-#include "lib/config.h"
-#include "lib/conn.h"
-#include "lib/client.h"
-#include "lib/api.h"
+#include "libtjota/log.h"
+#include "libtjota/config.h"
+#include "libtjota/conn.h"
+#include "libtjota/client.h"
+#include "libtjota/api.h"
 
 #include "purple.h"
 
