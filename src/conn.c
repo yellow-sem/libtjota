@@ -67,16 +67,33 @@ void tm_conn_close(struct tm_conn *conn)
     tm_conn_free(conn);
 }
 
+bool tm_conn_select(struct tm_conn *conn)
+{
+    fd_set fd_set;
+    FD_ZERO(&fd_set);
+    FD_SET(conn->sockfd, &fd_set);
+
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 1000;
+
+    return select(conn->sockfd + 1, &fd_set, NULL, NULL, &timeout) > 0;
+}
+
 char *tm_conn_read(struct tm_conn *conn)
 {
     static char in[4096];
     ssize_t length = read(conn->sockfd, in, sizeof(in));
 
-    char *data = malloc(sizeof(char) * length);
-    memcpy(data, in, length);
-    data[length - 1] = '\0';
+    if (length > 0) {
+        char *data = malloc(sizeof(char) * length);
+        memcpy(data, in, length);
+        data[length - 1] = '\0';
 
-    return data;
+        return data;
+    } else {
+        return NULL;
+    }
 }
 
 void tm_conn_write(struct tm_conn *conn, const char *data)

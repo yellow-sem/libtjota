@@ -2,36 +2,12 @@
 #define CLIENT_H
 
 #include <stdbool.h>
-#include <regex.h>
 #include <glib.h>
 
 #include "conn.h"
-
-struct tm_handler
-{
-    const char *regex_s;
-    regex_t *regex_c;
-    void (*handle)(int argc, char **argv);
-};
-
-struct tm_handler *tm_handler_new();
-void tm_handler_free(struct tm_handler *handler);
-
-struct tm_request
-{
-    char *command;
-    char *ident;
-    int argc;
-    char **argv;
-};
-
-struct tm_response
-{
-    char *command;
-    char *ident;
-    char *value;
-    bool ok;
-};
+#include "handler.h"
+#include "request.h"
+#include "response.h"
 
 struct tm_client
 {
@@ -42,6 +18,7 @@ struct tm_client
     void (*on_write)(char *data);
 
     GAsyncQueue *queue;
+    GMutex mutex;
     GHashTable *table;
 
     bool run;
@@ -55,8 +32,8 @@ struct tm_client *tm_client_new(struct tm_conn *conn,
                                 void (*on_write)(char *data));
 void tm_client_free(struct tm_client *client);
 
-void *tm_client_thread_routine_outgoing(void *data);
-void *tm_client_thread_routine_incoming(void *data);
+void *tm_client_thread_routine_outgoing(void *_client);
+void *tm_client_thread_routine_incoming(void *_client);
 
 void tm_client_start(struct tm_client *client);
 void tm_client_stop(struct tm_client *client);

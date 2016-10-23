@@ -38,17 +38,14 @@ bool tm_regex_match(regex_t *regex, const char *string,
     regexec(regex, string, ngroups, groups, 0);
     *argv = malloc(sizeof(char*) * ngroups);
 
-    bool result = false;
+    bool result = true;
 
     int i;
     char *part;
     for (i = 0; i < ngroups; i++) {
         part = tm_regex_substr(string, groups[i].rm_so, groups[i].rm_eo);
         (*argv)[i] = part;
-
-        if (!result && strlen(part) > 0) {
-            result = true;
-        }
+        result &= strlen(part) > 0;
     }
 
     *argc = ngroups;

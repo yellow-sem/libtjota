@@ -2,26 +2,6 @@
 
 #include <stdlib.h>
 #include <glib.h>
-#include <stdio.h>
-#include <string.h>
-
-#include "regex.h"
-#include "string.h"
-
-struct tm_handler *tm_handler_new()
-{
-    struct tm_handler *handler = malloc(sizeof(struct tm_handler));
-    handler->regex_s = NULL;
-    handler->regex_c = NULL;
-    handler->handle = NULL;
-    return handler;
-}
-
-void tm_handler_free(struct tm_handler *handler)
-{
-    if (handler->regex_c != NULL) tm_regex_free(handler->regex_c);
-    free(handler);
-}
 
 struct tm_client *tm_client_new(struct tm_conn *conn,
                                 struct tm_handler **handlers,
@@ -37,6 +17,7 @@ struct tm_client *tm_client_new(struct tm_conn *conn,
     client->on_write = on_write;
 
     client->queue = g_async_queue_new();
+    g_mutex_init(&client->mutex);
     client->table = g_hash_table_new(g_str_hash, g_str_equal);
 
     return client;
@@ -49,9 +30,9 @@ void tm_client_free(struct tm_client *client)
     free(client);
 }
 
-void *tm_client_thread_routine_outgoing(void *data)
+void *tm_client_thread_routine_outgoing(void *_client)
 {
-    struct tm_client *client = data;
+    struct tm_client *client = _client;
 
     do {
         struct tm_request *request = g_async_queue_try_pop(client->queue);
@@ -59,45 +40,50 @@ void *tm_client_thread_routine_outgoing(void *data)
             continue;
         }
 
-        int argc = 2 + request->argc;
-        char **argv = malloc(sizeof(char *) * argc);
-
-        argv[0] = request->command;
-        argv[1] = request->ident;
-
-        int i;
-
-        for (i = 0; i < request->argc; i++) {
-            char *arg = request->argv[i];
-
-            char *argq = malloc(2 + strlen(arg) + 1);
-            sprintf(argq, "'%s'", arg);
-
-            argv[2 + i] = argq;
-        }
-
-        char *data = tm_string_join(" ", argc, argv);
-
+        char *data = tm_request_encode(request);
         tm_conn_write(client->conn, data);
         client->on_write(data);
-
         free(data);
-
-        for (i = 0; i < request->argc; i++) {
-            free(argv[2 + i]);
-        }
-
-        free(argv);
 
     } while (client->run);
 }
 
-void *tm_client_thread_routine_incoming(void *data)
+void *tm_client_thread_routine_incoming(void *_client)
 {
-    struct tm_client *client = data;
+    struct tm_client *client = _client;
 
     do {
-        printf("in\n");
+        bool select = tm_conn_select(client->conn);
+        if (!select) {
+            continue;
+        }
+
+        char *data = tm_conn_read(client->conn);
+        if (data == NULL) {
+            continue;
+        }
+
+        bool match = false;
+
+        int i = 0;
+        struct tm_handler *handler = client->handlers[i];
+        while (handler != NULL) {
+            match |= tm_handler_handle(handler, data);
+            handler = client->handlers[++i];
+        }
+
+        if (!match) {
+            struct tm_response *response = tm_response_decode(data);
+            if (response != NULL) {
+                g_mutex_lock(&client->mutex);
+                g_hash_table_insert(client->table, response->ident, response);
+                g_mutex_unlock(&client->mutex);
+            }
+        }
+
+        client->on_read(data);
+        free(data);
+
     } while (client->run);
 }
 
@@ -124,9 +110,35 @@ void tm_client_stop(struct tm_client *client)
     pthread_join(client->thread_incoming, NULL);
 }
 
-
 void tm_client_send(struct tm_client *client,
                     struct tm_request *request)
 {
     g_async_queue_push(client->queue, request);
+}
+
+struct tm_response *tm_client_poll(struct tm_client *client,
+                                   struct tm_request *request)
+{
+    struct tm_response *response;
+
+    g_mutex_lock(&client->mutex);
+    response = g_hash_table_lookup(client->table, request->ident);
+    if (response != NULL) {
+        g_hash_table_remove(client->table, request->ident);
+    }
+    g_mutex_unlock(&client->mutex);
+
+    return response;
+}
+
+struct tm_response *tm_client_wait(struct tm_client *client,
+                                   struct tm_request *request)
+{
+    struct tm_response *response = NULL;
+
+    do {
+        response = tm_client_poll(client, request);
+    } while (response == NULL);
+
+    return response;
 }
