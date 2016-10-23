@@ -1,7 +1,8 @@
 #ifndef API_H
 #define API_H
 
-#include "client.h"
+#include "request.h"
+#include "handler.h"
 
 struct tm_request *tm_api_sys_exit();
 

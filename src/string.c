@@ -44,3 +44,18 @@ char *tm_string_join(const char *base, int argc, char **argv) {
 
     return string;
 }
+
+char *tm_string_random(int length)
+{
+    char *string = (char*) malloc((sizeof(char) * length) + 1);
+    static const char charset[] = "abcdef0123456789";
+
+    int i;
+    for (i = 0; i < length; i++) {
+        string[i] = charset[rand() % (int) (sizeof(charset) - 1)];
+    }
+
+    string[length] = '\0';
+
+    return string;
+}

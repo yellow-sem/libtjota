@@ -32,33 +32,27 @@ int main(int argc, const char *argv[]) {
 
         tm_client_start(client);
 
-        char *argv[] = { "asdf@yellow", "445" };
+        struct tm_request *request;
+        struct tm_response *response;
 
-        struct tm_request request;
-        request.command = "auth:login";
-        request.ident = "1234";
-        request.argc = 2;
-        request.argv = argv;
-
-        tm_client_send(client, &request);
-        struct tm_response *response = tm_client_wait(client, &request);
-
+        request = tm_api_auth_login_credential("asdf@yellow", "445");
+        tm_client_send(client, request);
+        response = tm_client_wait(client, request);
+        tm_request_free(request);
         if (response->ok) {
             printf("success\n");
         } else {
             printf("error\n");
         }
-
         tm_response_free(response);
 
         printf("exiting\n");
 
-        request.command = "sys:exit";
-        request.ident = NULL;
-        request.argc = 0;
-        request.argv = NULL;
-
-        tm_client_send(client, &request);
+        request = tm_api_sys_exit();
+        tm_client_send(client, request);
+        response = tm_client_wait(client, request);
+        tm_request_free(request);
+        tm_response_free(response);
 
         tm_client_stop(client);
 
