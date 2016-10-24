@@ -1,9 +1,8 @@
 CC=gcc
 V=valgrind
 
-CF_GLIB=`pkg-config glib-2.0 --libs --cflags`
+CF_BASE=`pkg-config glib-2.0 --libs --cflags` -pthread
 CF_PURPLE=`pkg-config purple --libs --cflags`
-CF=$(CF_GLIB) $(CF_PURPLE) -pthread
 
 V_ARGS=--tool=memcheck --leak-check=full --track-origins=yes
 
@@ -13,15 +12,20 @@ OUT=./out
 PLUGINS=~/.purple/plugins
 
 lib:
-	$(CC) -shared $(SRC)/libtjota/*.c -o $(OUT)/libtjota.so -fpic $(CF)
+	$(CC) -shared $(SRC)/libtjota/*.c -o $(OUT)/libtjota.so -fpic \
+	    $(CF_BASE)
 main:
-	$(CC) $(SRC)/main.c -o $(OUT)/main $(CF) -I$(SRC) -L$(OUT) -ltjota
-purple:
-	$(CC) -shared $(SRC)/purple.c -o $(OUT)/purple.so -fpic $(CF) -I$(SRC)
+	$(CC) $(SRC)/main.c -o $(OUT)/main \
+	    $(CF_BASE) -L$(OUT) -I$(SRC) -ltjota
+tjotapl:
+	$(CC) -shared $(SRC)/tjotapl.c -o $(OUT)/tjotapl.so -fpic \
+	    $(CF_BASE) $(CF_PURPLE) -L$(OUT) -I$(SRC) -ltjota
+run:
+	LD_LIBRARY_PATH=$(OUT) $(OUT)/main
 copy:
 	mkdir -p $(PLUGINS)
-	cp $(OUT)/purple.so $(PLUGINS)
-run:
-	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):$(OUT) $(OUT)/main
+	cp $(OUT)/tjotapl.so $(PLUGINS)
+pidgin:
+	LD_LIBRARY_PATH=$(OUT) pidgin -d
 debug:
-	$(V) $(V_ARGS) -v $(OUT)/main
+	LD_LIBRARY_PATH=$(OUT) $(V) $(V_ARGS) -v $(OUT)/main

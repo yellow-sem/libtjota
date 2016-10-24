@@ -49,7 +49,6 @@ tm_config *tm_config_new()
 
 tm_config *tm_config_free(tm_config *config)
 {
-    free(config->host);
     free(config);
 }
 

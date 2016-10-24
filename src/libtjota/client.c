@@ -1,7 +1,22 @@
 #include "client.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <glib.h>
+
+tm_callback *tm_callback_new(void (*func)(tm_response *response, void *data),
+                             void *data)
+{
+    tm_callback *callback = malloc(sizeof(tm_callback));
+    callback->func = func;
+    callback->data = data;
+    return callback;
+}
+
+void tm_callback_free(tm_callback *callback)
+{
+    free(callback);
+}
 
 tm_client *tm_client_new(tm_conn *conn,
                          tm_handler **handlers,
@@ -18,7 +33,8 @@ tm_client *tm_client_new(tm_conn *conn,
 
     client->queue = g_async_queue_new();
     g_mutex_init(&client->mutex);
-    client->table = g_hash_table_new(g_str_hash, g_str_equal);
+    client->table = g_hash_table_new_full(g_str_hash, g_str_equal,
+                                          &free, NULL);
 
     return client;
 }
@@ -45,6 +61,8 @@ void *tm_client_thread_routine_outgoing(void *_client)
         client->on_write(data);
         free(data);
 
+        tm_request_free(request);
+
     } while (client->run);
 }
 
@@ -63,6 +81,8 @@ void *tm_client_thread_routine_incoming(void *_client)
             continue;
         }
 
+        client->on_read(data);
+
         bool match = false;
 
         int i = 0;
@@ -74,14 +94,26 @@ void *tm_client_thread_routine_incoming(void *_client)
 
         if (!match) {
             tm_response *response = tm_response_decode(data);
+
             if (response != NULL) {
+                tm_callback *callback = NULL;
+
                 g_mutex_lock(&client->mutex);
-                g_hash_table_insert(client->table, response->ident, response);
+                callback = g_hash_table_lookup(client->table, response->ident);
+                if (callback != NULL) {
+                    g_hash_table_remove(client->table, response->ident);
+                }
                 g_mutex_unlock(&client->mutex);
+
+                if (callback != NULL) {
+                    callback->func(response, callback->data);
+                    tm_callback_free(callback);
+                }
+
+                tm_response_free(response);
             }
         }
 
-        client->on_read(data);
         free(data);
 
     } while (client->run);
@@ -111,34 +143,18 @@ void tm_client_stop(tm_client *client)
 }
 
 void tm_client_send(tm_client *client,
-                    tm_request *request)
+                    tm_request *request,
+                    void (*callback)(tm_response *response, void *data),
+                    void *data)
 {
-    g_async_queue_push(client->queue, request);
-}
+    char *key = malloc(strlen(request->ident) + 1);
+    strcpy(key, request->ident);
 
-tm_response *tm_client_poll(tm_client *client,
-                            tm_request *request)
-{
-    tm_response *response;
+    tm_callback *value = tm_callback_new(callback, data);
 
     g_mutex_lock(&client->mutex);
-    response = g_hash_table_lookup(client->table, request->ident);
-    if (response != NULL) {
-        g_hash_table_remove(client->table, request->ident);
-    }
+    g_hash_table_insert(client->table, key, value);
     g_mutex_unlock(&client->mutex);
 
-    return response;
-}
-
-tm_response *tm_client_wait(tm_client *client,
-                            tm_request *request)
-{
-    tm_response *response = NULL;
-
-    do {
-        response = tm_client_poll(client, request);
-    } while (response == NULL);
-
-    return response;
+    g_async_queue_push(client->queue, request);
 }

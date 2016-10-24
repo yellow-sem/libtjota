@@ -11,6 +11,16 @@
 
 typedef struct
 {
+    void (*func)(tm_response *response, void *data);
+    void *data;
+} tm_callback;
+
+tm_callback *tm_callback_new(void (*func)(tm_response *response, void *data),
+                             void *data);
+void tm_callback_free(tm_callback *callback);
+
+typedef struct
+{
     tm_conn *conn;
     tm_handler **handlers;
 
@@ -39,12 +49,8 @@ void tm_client_start(tm_client *client);
 void tm_client_stop(tm_client *client);
 
 void tm_client_send(tm_client *client,
-                    tm_request *request);
-
-tm_response *tm_client_poll(tm_client *client,
-                            tm_request *request);
-
-tm_response *tm_client_wait(tm_client *client,
-                            tm_request *request);
+                    tm_request *request,
+                    void (*callback)(tm_response *response, void *data),
+                    void *data);
 
 #endif
