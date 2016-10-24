@@ -24,12 +24,12 @@ static const int PREF_PORT_DEFAULT = 4080;
 
 void tm_on_read(char *data)
 {
-    printf("> %s\n", data);
+    tm_log_write(LOG_DEBUG, "> %s", data);
 }
 
 void tm_on_write(char *data)
 {
-    printf("< %s\n", data);
+    tm_log_write(LOG_DEBUG, "< %s", data);
 }
 
 static tm_client *tm_client_s = NULL;
