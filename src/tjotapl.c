@@ -22,6 +22,8 @@ static const char *PREF_HOST_DEFAULT = "localhost";
 static const char *PREF_PORT = "port";
 static const int PREF_PORT_DEFAULT = 4080;
 
+static const char *PREF_SESSION = "session";
+
 void tm_on_read(char *data)
 {
     tm_log_write(LOG_DEBUG, "> %s", data);
@@ -46,11 +48,13 @@ void tm_on_sys_exit(tm_response *response, void *data)
     }
 }
 
-void tm_on_auth_login(tm_response *response, void *_conn)
+void tm_on_auth_login(tm_response *response, void *_account)
 {
-    PurpleConnection *conn = _conn;
+    PurpleAccount *account = _account;
+    PurpleConnection *conn = purple_account_get_connection(account);
 
     if (response->ok) {
+        purple_account_set_string(account, PREF_SESSION, response->value);
         purple_connection_set_state(conn, PURPLE_CONNECTED);
     } else {
         purple_connection_set_state(conn, PURPLE_CONNECTING);
@@ -126,13 +130,23 @@ static void protocol_login(PurpleAccount *account)
                                   &tm_on_write);
         tm_client_start(tm_client_s);
 
-        const char* username = purple_account_get_username(account);
-        const char* password = purple_account_get_password(account);
+        const char *session = purple_account_get_string(account,
+                                                        PREF_SESSION,
+                                                        NULL);
+        if (session == NULL) {
+            const char* username = purple_account_get_username(account);
+            const char* password = purple_account_get_password(account);
 
-        tm_client_send(tm_client_s,
-                       tm_api_auth_login_credential(username, password),
-                       &tm_on_auth_login,
-                       conn);
+            tm_client_send(tm_client_s,
+                           tm_api_auth_login_credential(username, password),
+                           &tm_on_auth_login,
+                           account);
+        } else {
+            tm_client_send(tm_client_s,
+                           tm_api_auth_login_session(session),
+                           &tm_on_auth_login,
+                           account);
+        }
     }
 
     tm_config_free(tm_config);

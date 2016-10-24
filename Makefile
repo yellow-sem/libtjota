@@ -28,6 +28,6 @@ copy:
 pidgin:
 	LD_LIBRARY_PATH=$(OUT) pidgin -d
 finch:
-	LD_LIBRARY_PATH=$(OUT) finch
+	LD_LIBRARY_PATH=$(OUT) finch --nologin
 debug:
 	LD_LIBRARY_PATH=$(OUT) $(V) $(V_ARGS) -v $(OUT)/main
