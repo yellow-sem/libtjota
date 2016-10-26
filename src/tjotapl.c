@@ -7,6 +7,7 @@
 #include "plugin.h"
 #include "version.h"
 #include "accountopt.h"
+#include "roomlist.h"
 
 #include "libtjota/log.h"
 #include "libtjota/config.h"
@@ -110,9 +111,9 @@ static void protocol_login(PurpleAccount *account)
     PurpleConnection *conn = purple_account_get_connection(account);
 
     tm_config *tm_config = tm_config_new();
-    tm_config->host = (char*) purple_account_get_string(account,
-                                                        PREF_HOST,
-                                                        PREF_HOST_DEFAULT);
+    tm_config->host = (char *) purple_account_get_string(account,
+                                                         PREF_HOST,
+                                                         PREF_HOST_DEFAULT);
     tm_config->port = purple_account_get_int(account,
                                              PREF_PORT,
                                              PREF_PORT_DEFAULT);
@@ -125,17 +126,17 @@ static void protocol_login(PurpleAccount *account)
         static tm_handler *tm_handlers[] = { NULL };
 
         tm_client_s = tm_client_new(tm_conn,
-                                  tm_handlers,
-                                  &tm_on_read,
-                                  &tm_on_write);
+                                    tm_handlers,
+                                    &tm_on_read,
+                                    &tm_on_write);
         tm_client_start(tm_client_s);
 
         const char *session = purple_account_get_string(account,
                                                         PREF_SESSION,
                                                         NULL);
         if (session == NULL) {
-            const char* username = purple_account_get_username(account);
-            const char* password = purple_account_get_password(account);
+            const char *username = purple_account_get_username(account);
+            const char *password = purple_account_get_password(account);
 
             tm_client_send(tm_client_s,
                            tm_api_auth_login_credential(username, password),
@@ -164,12 +165,17 @@ static void protocol_close(PurpleConnection *conn)
     }
 }
 
+static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
+{
+}
+
 static PurplePluginProtocolInfo protocol_info = {
     .options = OPT_PROTO_CHAT_TOPIC,
     .list_icon = protocol_list_icon,
     .status_types = protocol_status_types,
     .login = protocol_login,
     .close = protocol_close,
+    .roomlist_get_list = protocol_roomlist_get_list,
     .struct_size = sizeof(PurplePluginProtocolInfo),
 };
 

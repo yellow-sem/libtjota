@@ -26,18 +26,18 @@ tm_request *tm_api_msg_req(const char *room_id);
 
 tm_request *tm_api_link_extract(const char *link);
 
-tm_handler *tm_api_room_self(void (*)(const char *room_id,
-                                      const char *room_name,
-                                      const char *room_type));
+tm_handler *tm_api_room_self(void (*callback)(const char *room_id,
+                                              const char *room_name,
+                                              const char *room_type));
 
-tm_handler *tm_api_room_any(void (*)(const char *room_id,
-                                     int type,
-                                     const char *user_id,
-                                     const char *user_credential));
+tm_handler *tm_api_room_any(void (*callback)(const char *room_id,
+                                             int type,
+                                             const char *user_id,
+                                             const char *user_credential));
 
-tm_handler *tm_api_msg_recv(void (*)(const char *room_id,
-                                     int timestamp,
-                                     const char *user_id,
-                                     const char *data));
+tm_handler *tm_api_msg_recv(void (*callback)(const char *room_id,
+                                             int timestamp,
+                                             const char *user_id,
+                                             const char *data));
 
 #endif

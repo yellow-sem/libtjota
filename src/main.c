@@ -8,6 +8,8 @@
 #include "libtjota/client.h"
 #include "libtjota/api.h"
 
+static const char *TEST_SESSION_ID = "fcd3fa2f-947c-400b-9f32-55729370fa00";
+
 void tm_on_read(char *data)
 {
     printf("> %s\n", data);
@@ -38,6 +40,14 @@ void tm_on_sys_exit(tm_response *response, void *data)
     }
 }
 
+void tm_on_room_self(const char *room_id,
+                     const char *room_name,
+                     const char *room_type)
+{
+    printf("joined room %s name='%s' type=%s\n",
+           room_id, room_name, room_type);
+}
+
 int main(int argc, const char *argv[])
 {
 
@@ -51,7 +61,10 @@ int main(int argc, const char *argv[])
     tm_conn *conn = tm_conn_open(config);
     if (conn != NULL) {
 
-        tm_handler *handlers[] = { NULL };
+        tm_handler *handlers[] = {
+            tm_api_room_self(&tm_on_room_self),
+            NULL
+        };
         tm_client *client = tm_client_new(conn,
                                           handlers,
                                           &tm_on_read,
@@ -60,8 +73,14 @@ int main(int argc, const char *argv[])
         tm_client_start(client);
 
         tm_client_send(client,
-                       tm_api_auth_login_credential("asdf@yellow", "445"),
+                       tm_api_auth_login_session(TEST_SESSION_ID),
                        &tm_on_auth_login,
+                       NULL);
+        sleep(2);
+
+        tm_client_send(client,
+                       tm_api_room_list(),
+                       NULL,
                        NULL);
         sleep(2);
 
@@ -73,6 +92,7 @@ int main(int argc, const char *argv[])
 
         tm_client_stop(client);
         tm_client_free(client);
+        tm_handler_free_all(handlers);
         tm_conn_close(conn);
     }
 

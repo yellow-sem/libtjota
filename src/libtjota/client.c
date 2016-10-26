@@ -83,15 +83,7 @@ void *tm_client_thread_routine_incoming(void *_client)
 
         client->on_read(data);
 
-        bool match = false;
-
-        int i = 0;
-        tm_handler *handler = client->handlers[i];
-        while (handler != NULL) {
-            match |= tm_handler_handle(handler, data);
-            handler = client->handlers[++i];
-        }
-
+        bool match = tm_handler_handle_all(client->handlers, data);
         if (!match) {
             tm_response *response = tm_response_decode(data);
 
@@ -147,14 +139,16 @@ void tm_client_send(tm_client *client,
                     void (*callback)(tm_response *response, void *data),
                     void *data)
 {
-    char *key = malloc(strlen(request->ident) + 1);
-    strcpy(key, request->ident);
+    if (callback != NULL) {
+        char *key = malloc(strlen(request->ident) + 1);
+        strcpy(key, request->ident);
 
-    tm_callback *value = tm_callback_new(callback, data);
+        tm_callback *value = tm_callback_new(callback, data);
 
-    g_mutex_lock(&client->mutex);
-    g_hash_table_insert(client->table, key, value);
-    g_mutex_unlock(&client->mutex);
+        g_mutex_lock(&client->mutex);
+        g_hash_table_insert(client->table, key, value);
+        g_mutex_unlock(&client->mutex);
+    }
 
     g_async_queue_push(client->queue, request);
 }
