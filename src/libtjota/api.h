@@ -21,23 +21,47 @@ tm_request *tm_api_room_invite(const char *room_id,
                                const char *user_credential);
 tm_request *tm_api_room_leave(const char *room_id);
 
-tm_request *tm_api_msg_send(const char *room_id, const char *data);
+tm_request *tm_api_msg_send(const char *room_id, const char *message_data);
 tm_request *tm_api_msg_req(const char *room_id);
 
 tm_request *tm_api_link_extract(const char *link);
 
-tm_handler *tm_api_room_self(void (*callback)(const char *room_id,
-                                              const char *room_name,
-                                              const char *room_type));
+typedef struct {
+    void (*handle)(const char *room_id,
+                   const char *room_name,
+                   const char *room_type,
+                   void *data);
+    void *data;
+} tm_api_room_self__callback;
 
-tm_handler *tm_api_room_any(void (*callback)(const char *room_id,
-                                             int type,
-                                             const char *user_id,
-                                             const char *user_credential));
+void tm_api_room_self__handle(int argc, char **argv, void *_callback);
 
-tm_handler *tm_api_msg_recv(void (*callback)(const char *room_id,
-                                             int timestamp,
-                                             const char *user_id,
-                                             const char *data));
+tm_handler *tm_api_room_self(tm_api_room_self__callback *callback);
+
+typedef struct {
+    void (*handle)(const char *room_id,
+                   int type,
+                   const char *user_id,
+                   const char *user_credential,
+                   void *data);
+    void *data;
+} tm_api_room_any__callback;
+
+void tm_api_room_any__handle(int argc, char **argv, void *_callback);
+
+tm_handler *tm_api_room_any(tm_api_room_any__callback *callback);
+
+typedef struct {
+    void (*callback)(const char *room_id,
+                     int timestamp,
+                     const char *user_id,
+                     const char *message_data,
+                     void *data);
+    void *data;
+} tm_api_msg_recv__callback;
+
+void tm_api_msg_recv__handle(int argc, char **argv, void *_callback);
+
+tm_handler *tm_api_msg_recv(tm_api_msg_recv__callback *callback);
 
 #endif

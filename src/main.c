@@ -42,7 +42,8 @@ void tm_on_sys_exit(tm_response *response, void *data)
 
 void tm_on_room_self(const char *room_id,
                      const char *room_name,
-                     const char *room_type)
+                     const char *room_type,
+                     void *data)
 {
     printf("joined room %s name='%s' type=%s\n",
            room_id, room_name, room_type);
@@ -61,8 +62,12 @@ int main(int argc, const char *argv[])
     tm_conn *conn = tm_conn_open(config);
     if (conn != NULL) {
 
+        tm_api_room_self__callback tm_api_room_self__callback;
+        tm_api_room_self__callback.handle = &tm_on_room_self;
+        tm_api_room_self__callback.data = NULL;
+
         tm_handler *handlers[] = {
-            tm_api_room_self(&tm_on_room_self),
+            tm_api_room_self(&tm_api_room_self__callback),
             NULL
         };
         tm_client *client = tm_client_new(conn,

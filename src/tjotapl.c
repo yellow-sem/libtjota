@@ -25,6 +25,9 @@ static const int PREF_PORT_DEFAULT = 4080;
 
 static const char *PREF_SESSION = "session";
 
+static const char *ROOMLIST_FIELD_ID = "id";
+static const char *ROOMLIST_FIELD_TYPE = "type";
+
 void tm_on_read(char *data)
 {
     tm_log_write(LOG_DEBUG, "> %s", data);
@@ -35,19 +38,12 @@ void tm_on_write(char *data)
     tm_log_write(LOG_DEBUG, "< %s", data);
 }
 
-static tm_client *tm_client_s = NULL;
+typedef struct {
+    tm_client *tm_client;
 
-void tm_on_sys_exit(tm_response *response, void *data)
-{
-    if (tm_client_s != NULL) {
-
-        tm_client_stop(tm_client_s);
-        tm_conn_close(tm_client_s->conn);
-        tm_client_free(tm_client_s);
-
-        tm_client_s = NULL;
-    }
-}
+    PurpleRoomlist *roomlist;
+    GMutex roomlist_mutex;
+} protocol_data;
 
 void tm_on_auth_login(tm_response *response, void *_account)
 {
@@ -62,6 +58,52 @@ void tm_on_auth_login(tm_response *response, void *_account)
     }
 }
 
+void tm_on_room_self(const char *room_id,
+                     const char *room_name,
+                     const char *room_type,
+                     void *_protocol_data)
+{
+    protocol_data *protocol_data = _protocol_data;
+
+    g_mutex_lock(&protocol_data->roomlist_mutex);
+
+    PurpleRoomlist *roomlist = protocol_data->roomlist;
+
+    PurpleRoomlistRoom *room =
+        purple_roomlist_room_new(PURPLE_ROOMLIST_ROOMTYPE_ROOM,
+                                 g_strdup(room_name),
+                                 NULL);
+
+    purple_roomlist_room_add_field(roomlist, room, room_id);
+    purple_roomlist_room_add_field(roomlist, room, room_type);
+
+    purple_roomlist_room_add(roomlist, room);
+
+    purple_roomlist_set_in_progress(roomlist, FALSE);
+
+    g_mutex_unlock(&protocol_data->roomlist_mutex);
+}
+
+tm_handler **tm_handlers_load(protocol_data *protocol_data)
+{
+    static tm_api_room_self__callback tm_api_room_self__callback;
+    tm_api_room_self__callback.handle = &tm_on_room_self;
+    tm_api_room_self__callback.data = protocol_data;
+
+    tm_handler **tm_handlers = malloc(sizeof(tm_handler *) * 2);
+
+    tm_handlers[0] = tm_api_room_self(&tm_api_room_self__callback);
+    tm_handlers[1] = NULL;
+
+    return tm_handlers;
+}
+
+void tm_handlers_unload(tm_handler **tm_handlers)
+{
+    tm_handler_free_all(tm_handlers);
+    free(tm_handlers);
+}
+
 static gboolean plugin_load(PurplePlugin *plugin)
 {
     tm_log_open();
@@ -70,16 +112,8 @@ static gboolean plugin_load(PurplePlugin *plugin)
 
 static gboolean plugin_unload(PurplePlugin *plugin)
 {
-    if (tm_client_s != NULL) {
-
-        tm_client_stop(tm_client_s);
-        tm_conn_close(tm_client_s->conn);
-        tm_client_free(tm_client_s);
-
-        tm_client_s = NULL;
-    }
-
     tm_log_close();
+    return TRUE;
 }
 
 static const char *protocol_list_icon(PurpleAccount *account,
@@ -123,13 +157,21 @@ static void protocol_login(PurpleAccount *account)
     if (tm_conn != NULL) {
         purple_connection_set_state(conn, PURPLE_CONNECTING);
 
-        static tm_handler *tm_handlers[] = { NULL };
+        protocol_data *protocol_data = malloc(sizeof(protocol_data));
 
-        tm_client_s = tm_client_new(tm_conn,
-                                    tm_handlers,
-                                    &tm_on_read,
-                                    &tm_on_write);
-        tm_client_start(tm_client_s);
+        protocol_data->tm_client = NULL;
+
+        protocol_data->roomlist = NULL;
+        g_mutex_init(&protocol_data->roomlist_mutex);
+
+        tm_client *tm_client = tm_client_new(tm_conn,
+                                             tm_handlers_load(protocol_data),
+                                             &tm_on_read,
+                                             &tm_on_write);
+        tm_client_start(tm_client);
+
+        protocol_data->tm_client = tm_client;
+        purple_connection_set_protocol_data(conn, protocol_data);
 
         const char *session = purple_account_get_string(account,
                                                         PREF_SESSION,
@@ -138,12 +180,12 @@ static void protocol_login(PurpleAccount *account)
             const char *username = purple_account_get_username(account);
             const char *password = purple_account_get_password(account);
 
-            tm_client_send(tm_client_s,
+            tm_client_send(tm_client,
                            tm_api_auth_login_credential(username, password),
                            &tm_on_auth_login,
                            account);
         } else {
-            tm_client_send(tm_client_s,
+            tm_client_send(tm_client,
                            tm_api_auth_login_session(session),
                            &tm_on_auth_login,
                            account);
@@ -157,16 +199,76 @@ static void protocol_close(PurpleConnection *conn)
 {
     purple_connection_set_state(conn, PURPLE_DISCONNECTED);
 
-    if (tm_client_s != NULL) {
-        tm_client_send(tm_client_s,
+    protocol_data *protocol_data = purple_connection_get_protocol_data(conn);
+
+    if (protocol_data != NULL) {
+        tm_client *tm_client = protocol_data->tm_client;
+
+        tm_client_send(tm_client,
                        tm_api_sys_exit(),
-                       *tm_on_sys_exit,
+                       NULL,
                        NULL);
+
+        tm_client_stop(tm_client);
+        tm_conn_close(tm_client->conn);
+        tm_handlers_unload(tm_client->handlers);
+        tm_client_free(tm_client);
+
+        free(protocol_data);
+        purple_connection_set_protocol_data(conn, NULL);
     }
 }
 
 static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
 {
+    PurpleAccount *account = purple_connection_get_account(conn);
+
+    protocol_data *protocol_data = purple_connection_get_protocol_data(conn);
+
+    g_mutex_lock(&protocol_data->roomlist_mutex);
+
+    tm_client *tm_client = protocol_data->tm_client;
+    PurpleRoomlist *roomlist = protocol_data->roomlist;
+
+    if (roomlist != NULL) {
+        purple_roomlist_unref(roomlist);
+    }
+
+    roomlist = purple_roomlist_new(account);
+
+    PurpleRoomlistField *field_id =
+        purple_roomlist_field_new(PURPLE_ROOMLIST_FIELD_STRING,
+                                  ROOMLIST_FIELD_ID,
+                                  ROOMLIST_FIELD_ID,
+                                  FALSE);
+    PurpleRoomlistField *field_type =
+        purple_roomlist_field_new(PURPLE_ROOMLIST_FIELD_STRING,
+                                  ROOMLIST_FIELD_TYPE,
+                                  ROOMLIST_FIELD_TYPE,
+                                  FALSE);
+
+    GList *fields = NULL;
+    fields = g_list_append(fields, field_id);
+    fields = g_list_append(fields, field_type);
+
+    purple_roomlist_set_fields(roomlist, fields);
+
+    protocol_data->roomlist = roomlist;
+
+    tm_client_send(tm_client,
+                   tm_api_room_list(),
+                   NULL,
+                   NULL);
+
+    g_mutex_unlock(&protocol_data->roomlist_mutex);
+
+    return roomlist;
+}
+
+void protocol_roomlist_cancel(PurpleRoomlist *roomlist)
+{
+    purple_roomlist_set_in_progress(roomlist, FALSE);
+    purple_roomlist_unref(roomlist);
 }
 
 static PurplePluginProtocolInfo protocol_info = {
@@ -176,6 +278,7 @@ static PurplePluginProtocolInfo protocol_info = {
     .login = protocol_login,
     .close = protocol_close,
     .roomlist_get_list = protocol_roomlist_get_list,
+    .roomlist_cancel = protocol_roomlist_cancel,
     .struct_size = sizeof(PurplePluginProtocolInfo),
 };
 

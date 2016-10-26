@@ -74,8 +74,8 @@ bool tm_conn_select(tm_conn *conn)
     FD_SET(conn->sockfd, &fd_set);
 
     struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 1000;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
 
     return select(conn->sockfd + 1, &fd_set, NULL, NULL, &timeout) > 0;
 }
