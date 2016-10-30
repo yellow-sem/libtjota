@@ -83,13 +83,23 @@ bool tm_conn_select(tm_conn *conn)
 char *tm_conn_read(tm_conn *conn)
 {
     static char in[4096];
-    ssize_t length = read(conn->sockfd, in, sizeof(in));
 
-    if (length > 0) {
-        char *data = malloc(sizeof(char) * length);
+    int i = 0;
+    char c = '\0';
+    while (true) {
+        read(conn->sockfd, &c, sizeof(char));
+        if (c == '\n' || c == '\0') {
+            break;
+        }
+        in[i] = c;
+        i++;
+    }
+
+    if (i > 0) {
+        int length = i;
+        char *data = malloc(sizeof(char) * length + 1);
         memcpy(data, in, length);
-        data[length - 1] = '\0';
-
+        data[length] = '\0';
         return data;
     } else {
         return NULL;

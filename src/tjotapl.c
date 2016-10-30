@@ -255,12 +255,12 @@ static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
 
     protocol_data->roomlist = roomlist;
 
+    g_mutex_unlock(&protocol_data->roomlist_mutex);
+
     tm_client_send(tm_client,
                    tm_api_room_list(),
                    NULL,
                    NULL);
-
-    g_mutex_unlock(&protocol_data->roomlist_mutex);
 
     return roomlist;
 }
