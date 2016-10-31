@@ -26,6 +26,7 @@ static const int PREF_PORT_DEFAULT = 4080;
 static const char *PREF_SESSION = "session";
 
 static const char *ROOMLIST_FIELD_ID = "id";
+static const char *ROOMLIST_FIELD_NAME = "name";
 static const char *ROOMLIST_FIELD_TYPE = "type";
 
 void tm_on_read(char *data)
@@ -140,6 +141,33 @@ static GList *protocol_status_types(PurpleAccount *account)
     return type_list;
 }
 
+static GList *protocol_chat_info(PurpleConnection *conn)
+{
+    struct proto_chat_entry *entry_id =
+        malloc(sizeof(struct proto_chat_entry));
+    entry_id->label = ROOMLIST_FIELD_ID;
+    entry_id->identifier = ROOMLIST_FIELD_ID;
+    entry_id->required = TRUE;
+
+    struct proto_chat_entry *entry_name =
+        malloc(sizeof(struct proto_chat_entry));
+    entry_name->label = ROOMLIST_FIELD_NAME;
+    entry_name->identifier = ROOMLIST_FIELD_NAME;
+    entry_name->required = TRUE;
+
+    struct proto_chat_entry *entry_type =
+        malloc(sizeof(struct proto_chat_entry));
+    entry_type->label = ROOMLIST_FIELD_TYPE;
+    entry_type->identifier = ROOMLIST_FIELD_TYPE;
+    entry_type->required = TRUE;
+
+    GList *info = NULL;
+    info = g_list_append(info, entry_id);
+    info = g_list_append(info, entry_name);
+    info = g_list_append(info, entry_type);
+    return info;
+}
+
 static void protocol_login(PurpleAccount *account)
 {
     PurpleConnection *conn = purple_account_get_connection(account);
@@ -158,9 +186,7 @@ static void protocol_login(PurpleAccount *account)
         purple_connection_set_state(conn, PURPLE_CONNECTING);
 
         protocol_data *protocol_data = malloc(sizeof(protocol_data));
-
         protocol_data->tm_client = NULL;
-
         protocol_data->roomlist = NULL;
         g_mutex_init(&protocol_data->roomlist_mutex);
 
@@ -219,6 +245,48 @@ static void protocol_close(PurpleConnection *conn)
     }
 }
 
+static void protocol_join_chat(PurpleConnection *conn,
+                               GHashTable *components)
+{
+    PurpleAccount *account = purple_connection_get_account(conn);
+
+    char *id = g_hash_table_lookup(components, ROOMLIST_FIELD_ID);
+    char *name = g_hash_table_lookup(components, ROOMLIST_FIELD_NAME);
+    char *type = g_hash_table_lookup(components, ROOMLIST_FIELD_TYPE);
+
+    PurpleChat *chat = purple_blist_find_chat(account, id);
+
+    if (chat == NULL) {
+        GHashTable *_components = g_hash_table_new_full(g_str_hash,
+                                                        g_str_equal,
+                                                        g_free,
+                                                        g_free);
+        GHashTableIter iter;
+        gpointer key;
+        gpointer value;
+
+        g_hash_table_iter_init(&iter, components);
+        while (g_hash_table_iter_next(&iter, &key, &value)) {
+            g_hash_table_insert(_components,
+                                g_strdup(key),
+                                g_strdup(value));
+        }
+
+        chat = purple_chat_new(account, g_strdup(name), _components);
+
+        purple_blist_add_chat(chat, NULL, NULL);
+    }
+
+    PurpleConversation *conv = purple_find_conversation_with_account(
+            PURPLE_CONV_TYPE_CHAT, name, account);
+
+    if (conv == NULL) {
+        conv = purple_conversation_new(PURPLE_CONV_TYPE_CHAT, account, name);
+    }
+
+    purple_conversation_present(conv);
+}
+
 static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
 {
     PurpleAccount *account = purple_connection_get_account(conn);
@@ -275,8 +343,10 @@ static PurplePluginProtocolInfo protocol_info = {
     .options = OPT_PROTO_CHAT_TOPIC,
     .list_icon = protocol_list_icon,
     .status_types = protocol_status_types,
+    .chat_info = protocol_chat_info,
     .login = protocol_login,
     .close = protocol_close,
+    .join_chat = protocol_join_chat,
     .roomlist_get_list = protocol_roomlist_get_list,
     .roomlist_cancel = protocol_roomlist_cancel,
     .struct_size = sizeof(PurplePluginProtocolInfo),
