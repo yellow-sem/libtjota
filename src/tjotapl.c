@@ -15,6 +15,8 @@
 #include "libtjota/client.h"
 #include "libtjota/api.h"
 
+#define INITIAL_CHAT_ID 1000
+
 static const char *ICON = "irc";
 
 static const char *PREF_HOST = "host";
@@ -25,9 +27,9 @@ static const int PREF_PORT_DEFAULT = 4080;
 
 static const char *PREF_SESSION = "session";
 
-static const char *ROOMLIST_FIELD_ID = "id";
-static const char *ROOMLIST_FIELD_NAME = "name";
-static const char *ROOMLIST_FIELD_TYPE = "type";
+static const char *ROOM_FIELD_ID = "id";
+static const char *ROOM_FIELD_NAME = "name";
+static const char *ROOM_FIELD_TYPE = "type";
 
 void tm_on_read(char *data)
 {
@@ -145,20 +147,20 @@ static GList *protocol_chat_info(PurpleConnection *conn)
 {
     struct proto_chat_entry *entry_id =
         malloc(sizeof(struct proto_chat_entry));
-    entry_id->label = ROOMLIST_FIELD_ID;
-    entry_id->identifier = ROOMLIST_FIELD_ID;
+    entry_id->label = ROOM_FIELD_ID;
+    entry_id->identifier = ROOM_FIELD_ID;
     entry_id->required = TRUE;
 
     struct proto_chat_entry *entry_name =
         malloc(sizeof(struct proto_chat_entry));
-    entry_name->label = ROOMLIST_FIELD_NAME;
-    entry_name->identifier = ROOMLIST_FIELD_NAME;
+    entry_name->label = ROOM_FIELD_NAME;
+    entry_name->identifier = ROOM_FIELD_NAME;
     entry_name->required = TRUE;
 
     struct proto_chat_entry *entry_type =
         malloc(sizeof(struct proto_chat_entry));
-    entry_type->label = ROOMLIST_FIELD_TYPE;
-    entry_type->identifier = ROOMLIST_FIELD_TYPE;
+    entry_type->label = ROOM_FIELD_TYPE;
+    entry_type->identifier = ROOM_FIELD_TYPE;
     entry_type->required = TRUE;
 
     GList *info = NULL;
@@ -250,9 +252,9 @@ static void protocol_join_chat(PurpleConnection *conn,
 {
     PurpleAccount *account = purple_connection_get_account(conn);
 
-    char *id = g_hash_table_lookup(components, ROOMLIST_FIELD_ID);
-    char *name = g_hash_table_lookup(components, ROOMLIST_FIELD_NAME);
-    char *type = g_hash_table_lookup(components, ROOMLIST_FIELD_TYPE);
+    char *id = g_hash_table_lookup(components, ROOM_FIELD_ID);
+    char *name = g_hash_table_lookup(components, ROOM_FIELD_NAME);
+    char *type = g_hash_table_lookup(components, ROOM_FIELD_TYPE);
 
     PurpleChat *chat = purple_blist_find_chat(account, id);
 
@@ -278,13 +280,56 @@ static void protocol_join_chat(PurpleConnection *conn,
     }
 
     PurpleConversation *conv = purple_find_conversation_with_account(
-            PURPLE_CONV_TYPE_CHAT, name, account);
+            PURPLE_CONV_TYPE_CHAT, id, account);
 
     if (conv == NULL) {
-        conv = purple_conversation_new(PURPLE_CONV_TYPE_CHAT, account, name);
+        conv = purple_conversation_new(PURPLE_CONV_TYPE_CHAT, account, id);
+        purple_conversation_set_data(conv, ROOM_FIELD_ID, id);
+
+        static int id = INITIAL_CHAT_ID;
+
+        PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
+        conv_chat->id = ++id;
     }
 
     purple_conversation_present(conv);
+}
+
+static int protocol_chat_send(PurpleConnection *conn,
+                              int id,
+                              const char *message,
+                              PurpleMessageFlags flags)
+{
+    PurpleConversation *conv = NULL;
+
+    GList *list = purple_get_conversations();
+    while (list != NULL) {
+        PurpleConversation *list_conv = list->data;
+        PurpleConvChat *list_conv_chat =
+            purple_conversation_get_chat_data(list_conv);
+
+        if (list_conv_chat != NULL) {
+            if (list_conv_chat->id == id) {
+                conv = list_conv;
+            }
+        }
+
+        list = list->next;
+    }
+
+    if (conv != NULL) {
+        char *room_id = purple_conversation_get_data(conv, ROOM_FIELD_ID);
+
+        protocol_data *protocol_data =
+            purple_connection_get_protocol_data(conn);
+
+        tm_client *tm_client = protocol_data->tm_client;
+
+        tm_client_send(tm_client,
+                       tm_api_msg_send(room_id, message),
+                       NULL,
+                       NULL);
+    }
 }
 
 static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
@@ -306,13 +351,13 @@ static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
 
     PurpleRoomlistField *field_id =
         purple_roomlist_field_new(PURPLE_ROOMLIST_FIELD_STRING,
-                                  ROOMLIST_FIELD_ID,
-                                  ROOMLIST_FIELD_ID,
+                                  ROOM_FIELD_ID,
+                                  ROOM_FIELD_ID,
                                   FALSE);
     PurpleRoomlistField *field_type =
         purple_roomlist_field_new(PURPLE_ROOMLIST_FIELD_STRING,
-                                  ROOMLIST_FIELD_TYPE,
-                                  ROOMLIST_FIELD_TYPE,
+                                  ROOM_FIELD_TYPE,
+                                  ROOM_FIELD_TYPE,
                                   FALSE);
 
     GList *fields = NULL;
@@ -347,6 +392,7 @@ static PurplePluginProtocolInfo protocol_info = {
     .login = protocol_login,
     .close = protocol_close,
     .join_chat = protocol_join_chat,
+    .chat_send = protocol_chat_send,
     .roomlist_get_list = protocol_roomlist_get_list,
     .roomlist_cancel = protocol_roomlist_cancel,
     .struct_size = sizeof(PurplePluginProtocolInfo),

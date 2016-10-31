@@ -23,6 +23,11 @@ tm_request *tm_api_room_list()
     return tm_request_new_command("room:list");
 }
 
+tm_request *tm_api_msg_send(const char *room_id, const char *message_data)
+{
+    return tm_request_new_command_args("msg:send", 2, room_id, message_data);
+}
+
 void tm_api_room_self__handle(int argc, char **argv, void *_callback)
 {
     tm_api_room_self__callback *callback = _callback;
