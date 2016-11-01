@@ -93,19 +93,20 @@ PurpleConversation *get_conversation_for_chat(int id)
 typedef struct
 {
     PurpleConversation *conv;
-    char *user_id;
-    char *message_data;
-} write_message_data;
+    char *who;
+    char *message;
+    time_t when;
+} write_message_data_t;
 
 gboolean write_message(void *_write_message_data)
 {
-    write_message_data *write_message_data = _write_message_data;
+    write_message_data_t *write_message_data = _write_message_data;
 
     purple_conversation_write(write_message_data->conv,
-                              write_message_data->user_id,
-                              write_message_data->message_data,
+                              write_message_data->who,
+                              write_message_data->message,
                               PURPLE_MESSAGE_RECV,
-                              time(NULL));
+                              write_message_data->when);
 }
 
 typedef struct {
@@ -113,7 +114,7 @@ typedef struct {
 
     PurpleRoomlist *roomlist;
     GMutex roomlist_mutex;
-} protocol_data;
+} protocol_data_t;
 
 void tm_on_auth_login(tm_response *response, void *_account)
 {
@@ -133,7 +134,7 @@ void tm_on_room_self(const char *room_id,
                      const char *room_type,
                      void *_protocol_data)
 {
-    protocol_data *protocol_data = _protocol_data;
+    protocol_data_t *protocol_data = _protocol_data;
 
     g_mutex_lock(&protocol_data->roomlist_mutex);
 
@@ -160,7 +161,7 @@ void tm_on_room_any(const char *room_id,
                     const char *user_credential,
                     void *_protocol_data)
 {
-    protocol_data *protocol_data = _protocol_data;
+    protocol_data_t *protocol_data = _protocol_data;
 
     PurpleConversation *conv = get_conversation_for_room(room_id);
     if (conv != NULL) {
@@ -183,22 +184,28 @@ void tm_on_msg_recv(const char *room_id,
                     const char *message_data,
                     void *_protocol_data)
 {
-    protocol_data *protocol_data = _protocol_data;
+    protocol_data_t *protocol_data = _protocol_data;
 
     PurpleConversation *conv = get_conversation_for_room(room_id);
     if (conv != NULL) {
-        write_message_data *write_message_data =
-            malloc(sizeof(write_message_data));
+        write_message_data_t *write_message_data =
+            malloc(sizeof(write_message_data_t));
+
+        time_t when = atol(timestamp) / 1000;
+        if (when == 0) {
+            when = time(NULL);
+        }
 
         write_message_data->conv = conv;
-        write_message_data->user_id = g_strdup(user_credential);
-        write_message_data->message_data = g_strdup(message_data);
+        write_message_data->who = g_strdup(user_credential);
+        write_message_data->message = g_strdup(message_data);
+        write_message_data->when = when;
 
         gdk_threads_add_idle(&write_message, write_message_data);
     }
 }
 
-tm_handler **tm_handlers_load(protocol_data *protocol_data)
+tm_handler **tm_handlers_load(protocol_data_t *protocol_data)
 {
     static tm_api_room_self__callback tm_api_room_self__callback;
     tm_api_room_self__callback.handle = &tm_on_room_self;
@@ -323,7 +330,7 @@ static void protocol_login(PurpleAccount *account)
     if (tm_conn != NULL) {
         purple_connection_set_state(conn, PURPLE_CONNECTING);
 
-        protocol_data *protocol_data = malloc(sizeof(protocol_data));
+        protocol_data_t *protocol_data = malloc(sizeof(protocol_data_t));
         protocol_data->tm_client = NULL;
         protocol_data->roomlist = NULL;
         g_mutex_init(&protocol_data->roomlist_mutex);
@@ -363,7 +370,7 @@ static void protocol_close(PurpleConnection *conn)
 {
     purple_connection_set_state(conn, PURPLE_DISCONNECTED);
 
-    protocol_data *protocol_data = purple_connection_get_protocol_data(conn);
+    protocol_data_t *protocol_data = purple_connection_get_protocol_data(conn);
 
     if (protocol_data != NULL) {
         tm_client *tm_client = protocol_data->tm_client;
@@ -444,7 +451,7 @@ static void protocol_join_chat(PurpleConnection *conn,
 
         purple_conv_chat_add_users(conv_chat, users, NULL, flags, FALSE);
 
-        protocol_data *protocol_data =
+        protocol_data_t *protocol_data =
             purple_connection_get_protocol_data(conn);
 
         tm_client *tm_client = protocol_data->tm_client;
@@ -472,7 +479,7 @@ static int protocol_chat_send(PurpleConnection *conn,
     if (conv != NULL) {
         char *room_id = purple_conversation_get_data(conv, ROOM_FIELD_ID);
 
-        protocol_data *protocol_data =
+        protocol_data_t *protocol_data =
             purple_connection_get_protocol_data(conn);
 
         tm_client *tm_client = protocol_data->tm_client;
@@ -488,7 +495,7 @@ static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
 {
     PurpleAccount *account = purple_connection_get_account(conn);
 
-    protocol_data *protocol_data = purple_connection_get_protocol_data(conn);
+    protocol_data_t *protocol_data = purple_connection_get_protocol_data(conn);
 
     g_mutex_lock(&protocol_data->roomlist_mutex);
 
