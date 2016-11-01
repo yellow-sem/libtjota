@@ -74,8 +74,8 @@ bool tm_conn_select(tm_conn *conn)
     FD_SET(conn->sockfd, &fd_set);
 
     struct timeval timeout;
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 10000;
 
     return select(conn->sockfd + 1, &fd_set, NULL, NULL, &timeout) > 0;
 }
@@ -108,5 +108,10 @@ char *tm_conn_read(tm_conn *conn)
 
 void tm_conn_write(tm_conn *conn, const char *data)
 {
-    write(conn->sockfd, data, strlen(data));
+    char *out = malloc(sizeof(char) * (strlen(data) + 2));
+    sprintf(out, "%s\n", data);
+
+    write(conn->sockfd, out, strlen(out));
+
+    free(out);
 }

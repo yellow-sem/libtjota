@@ -1,7 +1,11 @@
 CC=gcc
 V=valgrind
 
-CF_BASE=`pkg-config glib-2.0 --libs --cflags` -pthread
+CF_GLIB=`pkg-config glib-2.0 --libs --cflags`
+
+CF_BASE=$(CF_GLIB) -pthread
+
+CF_GDK=`pkg-config gdk-3.0 --libs --cflags`
 CF_PURPLE=`pkg-config purple --libs --cflags`
 
 V_ARGS=--tool=memcheck --leak-check=full --track-origins=yes
@@ -19,7 +23,7 @@ main:
 	    $(CF_BASE) -L$(OUT) -I$(SRC) -ltjota
 tjotapl:
 	$(CC) -shared $(SRC)/tjotapl.c -o $(OUT)/tjotapl.so -fpic \
-	    $(CF_BASE) $(CF_PURPLE) -L$(OUT) -I$(SRC) -ltjota
+	    $(CF_BASE) $(CF_GDK) $(CF_PURPLE) -L$(OUT) -I$(SRC) -ltjota
 run:
 	LD_LIBRARY_PATH=$(OUT) $(OUT)/main
 copy:

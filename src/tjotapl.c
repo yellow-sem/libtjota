@@ -1,7 +1,9 @@
 #define PURPLE_PLUGINS
 
-#include <glib.h>
 #include <stdio.h>
+#include <string.h>
+#include <glib.h>
+#include <gdk/gdk.h>
 
 #include "notify.h"
 #include "plugin.h"
@@ -17,6 +19,8 @@
 
 #define INITIAL_CHAT_ID 1000
 
+static const char *USER_ID_SYSTEM = "system";
+
 static const char *ICON = "irc";
 
 static const char *PREF_HOST = "host";
@@ -30,6 +34,7 @@ static const char *PREF_SESSION = "session";
 static const char *ROOM_FIELD_ID = "id";
 static const char *ROOM_FIELD_NAME = "name";
 static const char *ROOM_FIELD_TYPE = "type";
+static const char *ROOM_FIELD_DATA = "data";
 
 void tm_on_read(char *data)
 {
@@ -39,6 +44,68 @@ void tm_on_read(char *data)
 void tm_on_write(char *data)
 {
     tm_log_write(LOG_DEBUG, "< %s", data);
+}
+
+PurpleConversation *get_conversation_for_room(const char *room_id)
+{
+    PurpleConversation *conv = NULL;
+
+    GList *list = purple_get_conversations();
+    while (list != NULL) {
+        PurpleConversation *list_conv = list->data;
+        char *list_room_id = purple_conversation_get_data(list_conv,
+                                                          ROOM_FIELD_ID);
+
+        if (list_room_id) {
+            if (strcmp(list_room_id, room_id) == 0) {
+                conv = list_conv;
+            }
+        }
+
+        list = list->next;
+    }
+
+    return conv;
+}
+
+PurpleConversation *get_conversation_for_chat(int id)
+{
+    PurpleConversation *conv = NULL;
+
+    GList *list = purple_get_conversations();
+    while (list != NULL) {
+        PurpleConversation *list_conv = list->data;
+        PurpleConvChat *list_conv_chat =
+            purple_conversation_get_chat_data(list_conv);
+
+        if (list_conv_chat != NULL) {
+            if (list_conv_chat->id == id) {
+                conv = list_conv;
+            }
+        }
+
+        list = list->next;
+    }
+
+    return conv;
+}
+
+typedef struct
+{
+    PurpleConversation *conv;
+    char *user_id;
+    char *message_data;
+} write_message_data;
+
+gboolean write_message(void *_write_message_data)
+{
+    write_message_data *write_message_data = _write_message_data;
+
+    purple_conversation_write(write_message_data->conv,
+                              write_message_data->user_id,
+                              write_message_data->message_data,
+                              PURPLE_MESSAGE_RECV,
+                              time(NULL));
 }
 
 typedef struct {
@@ -87,16 +154,70 @@ void tm_on_room_self(const char *room_id,
     g_mutex_unlock(&protocol_data->roomlist_mutex);
 }
 
+void tm_on_room_any(const char *room_id,
+                    const char *action,
+                    const char *user_id,
+                    const char *user_credential,
+                    void *_protocol_data)
+{
+    protocol_data *protocol_data = _protocol_data;
+
+    PurpleConversation *conv = get_conversation_for_room(room_id);
+    if (conv != NULL) {
+        PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
+
+        GList *users = NULL;
+        GList *flags = NULL;
+
+        users = g_list_append(users, (void *) user_credential);
+        flags = g_list_append(flags, GINT_TO_POINTER(PURPLE_CBFLAGS_NONE));
+
+        purple_conv_chat_add_users(conv_chat, users, NULL, flags, FALSE);
+    }
+}
+
+void tm_on_msg_recv(const char *room_id,
+                    const char *timestamp,
+                    const char *user_id,
+                    const char *user_credential,
+                    const char *message_data,
+                    void *_protocol_data)
+{
+    protocol_data *protocol_data = _protocol_data;
+
+    PurpleConversation *conv = get_conversation_for_room(room_id);
+    if (conv != NULL) {
+        write_message_data *write_message_data =
+            malloc(sizeof(write_message_data));
+
+        write_message_data->conv = conv;
+        write_message_data->user_id = g_strdup(user_credential);
+        write_message_data->message_data = g_strdup(message_data);
+
+        gdk_threads_add_idle(&write_message, write_message_data);
+    }
+}
+
 tm_handler **tm_handlers_load(protocol_data *protocol_data)
 {
     static tm_api_room_self__callback tm_api_room_self__callback;
     tm_api_room_self__callback.handle = &tm_on_room_self;
     tm_api_room_self__callback.data = protocol_data;
 
-    tm_handler **tm_handlers = malloc(sizeof(tm_handler *) * 2);
+    static tm_api_room_any__callback tm_api_room_any__callback;
+    tm_api_room_any__callback.handle = &tm_on_room_any;
+    tm_api_room_any__callback.data = protocol_data;
+
+    static tm_api_msg_recv__callback tm_api_msg_recv__callback;
+    tm_api_msg_recv__callback.handle = &tm_on_msg_recv;
+    tm_api_msg_recv__callback.data = protocol_data;
+
+    tm_handler **tm_handlers = malloc(sizeof(tm_handler *) * 4);
 
     tm_handlers[0] = tm_api_room_self(&tm_api_room_self__callback);
-    tm_handlers[1] = NULL;
+    tm_handlers[1] = tm_api_room_any(&tm_api_room_any__callback);
+    tm_handlers[2] = tm_api_msg_recv(&tm_api_msg_recv__callback);
+    tm_handlers[3] = NULL;
 
     return tm_handlers;
 }
@@ -149,24 +270,39 @@ static GList *protocol_chat_info(PurpleConnection *conn)
         malloc(sizeof(struct proto_chat_entry));
     entry_id->label = ROOM_FIELD_ID;
     entry_id->identifier = ROOM_FIELD_ID;
-    entry_id->required = TRUE;
+    entry_id->required = FALSE;
+    entry_id->is_int = FALSE;
+    entry_id->secret = TRUE;
 
     struct proto_chat_entry *entry_name =
         malloc(sizeof(struct proto_chat_entry));
     entry_name->label = ROOM_FIELD_NAME;
     entry_name->identifier = ROOM_FIELD_NAME;
-    entry_name->required = TRUE;
+    entry_name->required = FALSE;
+    entry_name->is_int = FALSE;
+    entry_name->secret = FALSE;
 
     struct proto_chat_entry *entry_type =
         malloc(sizeof(struct proto_chat_entry));
     entry_type->label = ROOM_FIELD_TYPE;
     entry_type->identifier = ROOM_FIELD_TYPE;
-    entry_type->required = TRUE;
+    entry_type->required = FALSE;
+    entry_type->is_int = FALSE;
+    entry_type->secret = FALSE;
+
+    struct proto_chat_entry *entry_data =
+        malloc(sizeof(struct proto_chat_entry));
+    entry_data->label = ROOM_FIELD_DATA;
+    entry_data->identifier = ROOM_FIELD_DATA;
+    entry_data->required = FALSE;
+    entry_data->is_int = FALSE;
+    entry_data->secret = FALSE;
 
     GList *info = NULL;
     info = g_list_append(info, entry_id);
     info = g_list_append(info, entry_name);
     info = g_list_append(info, entry_type);
+    info = g_list_append(info, entry_data);
     return info;
 }
 
@@ -252,11 +388,11 @@ static void protocol_join_chat(PurpleConnection *conn,
 {
     PurpleAccount *account = purple_connection_get_account(conn);
 
-    char *id = g_hash_table_lookup(components, ROOM_FIELD_ID);
-    char *name = g_hash_table_lookup(components, ROOM_FIELD_NAME);
-    char *type = g_hash_table_lookup(components, ROOM_FIELD_TYPE);
+    char *room_id = g_hash_table_lookup(components, ROOM_FIELD_ID);
+    char *room_name = g_hash_table_lookup(components, ROOM_FIELD_NAME);
+    char *room_type = g_hash_table_lookup(components, ROOM_FIELD_TYPE);
 
-    PurpleChat *chat = purple_blist_find_chat(account, id);
+    PurpleChat *chat = purple_blist_find_chat(account, room_id);
 
     if (chat == NULL) {
         GHashTable *_components = g_hash_table_new_full(g_str_hash,
@@ -274,22 +410,54 @@ static void protocol_join_chat(PurpleConnection *conn,
                                 g_strdup(value));
         }
 
-        chat = purple_chat_new(account, g_strdup(name), _components);
+        chat = purple_chat_new(account, g_strdup(room_name), _components);
 
         purple_blist_add_chat(chat, NULL, NULL);
     }
 
-    PurpleConversation *conv = purple_find_conversation_with_account(
-            PURPLE_CONV_TYPE_CHAT, id, account);
+    PurpleConversation *conv =
+        purple_find_conversation_with_account(PURPLE_CONV_TYPE_CHAT,
+                                              room_id,
+                                              account);
 
     if (conv == NULL) {
-        conv = purple_conversation_new(PURPLE_CONV_TYPE_CHAT, account, id);
-        purple_conversation_set_data(conv, ROOM_FIELD_ID, id);
+        conv = purple_conversation_new(PURPLE_CONV_TYPE_CHAT,
+                                       account,
+                                       room_id);
+
+        purple_conversation_set_data(conv, ROOM_FIELD_ID, room_id);
+        purple_conversation_set_logging(conv, TRUE);
+        purple_conversation_update(conv, PURPLE_CONV_UPDATE_LOGGING);
+
+        conn->buddy_chats = g_slist_append(conn->buddy_chats, conv);
 
         static int id = INITIAL_CHAT_ID;
 
         PurpleConvChat *conv_chat = purple_conversation_get_chat_data(conv);
         conv_chat->id = ++id;
+
+        GList *users = NULL;
+        GList *flags = NULL;
+
+        users = g_list_append(users, (void *) USER_ID_SYSTEM);
+        flags = g_list_append(flags, GINT_TO_POINTER(PURPLE_CBFLAGS_FOUNDER));
+
+        purple_conv_chat_add_users(conv_chat, users, NULL, flags, FALSE);
+
+        protocol_data *protocol_data =
+            purple_connection_get_protocol_data(conn);
+
+        tm_client *tm_client = protocol_data->tm_client;
+
+        tm_client_send(tm_client,
+                       tm_api_room_list_room(room_id),
+                       NULL,
+                       NULL);
+
+        tm_client_send(tm_client,
+                       tm_api_msg_req(room_id),
+                       NULL,
+                       NULL);
     }
 
     purple_conversation_present(conv);
@@ -300,23 +468,7 @@ static int protocol_chat_send(PurpleConnection *conn,
                               const char *message,
                               PurpleMessageFlags flags)
 {
-    PurpleConversation *conv = NULL;
-
-    GList *list = purple_get_conversations();
-    while (list != NULL) {
-        PurpleConversation *list_conv = list->data;
-        PurpleConvChat *list_conv_chat =
-            purple_conversation_get_chat_data(list_conv);
-
-        if (list_conv_chat != NULL) {
-            if (list_conv_chat->id == id) {
-                conv = list_conv;
-            }
-        }
-
-        list = list->next;
-    }
-
+    PurpleConversation *conv = get_conversation_for_chat(id);
     if (conv != NULL) {
         char *room_id = purple_conversation_get_data(conv, ROOM_FIELD_ID);
 
