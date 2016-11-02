@@ -122,6 +122,16 @@ void tm_on_auth_login(tm_response *response, void *_account)
     PurpleConnection *conn = purple_account_get_connection(account);
 
     if (response->ok) {
+        protocol_data_t *protocol_data =
+            purple_connection_get_protocol_data(conn);
+
+        tm_client *tm_client = protocol_data->tm_client;
+
+        tm_client_send(tm_client,
+                       tm_api_status_req(),
+                       NULL,
+                       NULL);
+
         purple_account_set_string(account, PREF_SESSION, response->value);
         purple_connection_set_state(conn, PURPLE_CONNECTED);
     } else {
@@ -132,6 +142,7 @@ void tm_on_auth_login(tm_response *response, void *_account)
 void tm_on_room_self(const char *room_id,
                      const char *room_name,
                      const char *room_type,
+                     const char *room_data,
                      void *_protocol_data)
 {
     protocol_data_t *protocol_data = _protocol_data;
@@ -147,6 +158,7 @@ void tm_on_room_self(const char *room_id,
 
     purple_roomlist_room_add_field(roomlist, room, room_id);
     purple_roomlist_room_add_field(roomlist, room, room_type);
+    purple_roomlist_room_add_field(roomlist, room, room_data);
 
     purple_roomlist_room_add(roomlist, room);
 
@@ -205,6 +217,14 @@ void tm_on_msg_recv(const char *room_id,
     }
 }
 
+void tm_on_status_recv(const char *user_id,
+                       const char *user_credential,
+                       const char *status,
+                       void *_protocol_data)
+{
+    protocol_data_t *protocol_data = _protocol_data;
+}
+
 tm_handler **tm_handlers_load(protocol_data_t *protocol_data)
 {
     static tm_api_room_self__callback tm_api_room_self__callback;
@@ -219,12 +239,17 @@ tm_handler **tm_handlers_load(protocol_data_t *protocol_data)
     tm_api_msg_recv__callback.handle = &tm_on_msg_recv;
     tm_api_msg_recv__callback.data = protocol_data;
 
-    tm_handler **tm_handlers = malloc(sizeof(tm_handler *) * 4);
+    static tm_api_status_recv__callback tm_api_status_recv__callback;
+    tm_api_status_recv__callback.handle = &tm_on_status_recv;
+    tm_api_status_recv__callback.data = protocol_data;
+
+    tm_handler **tm_handlers = malloc(sizeof(tm_handler *) * 5);
 
     tm_handlers[0] = tm_api_room_self(&tm_api_room_self__callback);
     tm_handlers[1] = tm_api_room_any(&tm_api_room_any__callback);
     tm_handlers[2] = tm_api_msg_recv(&tm_api_msg_recv__callback);
-    tm_handlers[3] = NULL;
+    tm_handlers[3] = tm_api_status_recv(&tm_api_status_recv__callback);
+    tm_handlers[4] = NULL;
 
     return tm_handlers;
 }
@@ -279,7 +304,7 @@ static GList *protocol_chat_info(PurpleConnection *conn)
     entry_id->identifier = ROOM_FIELD_ID;
     entry_id->required = FALSE;
     entry_id->is_int = FALSE;
-    entry_id->secret = TRUE;
+    entry_id->secret = FALSE;
 
     struct proto_chat_entry *entry_name =
         malloc(sizeof(struct proto_chat_entry));
@@ -398,6 +423,7 @@ static void protocol_join_chat(PurpleConnection *conn,
     char *room_id = g_hash_table_lookup(components, ROOM_FIELD_ID);
     char *room_name = g_hash_table_lookup(components, ROOM_FIELD_NAME);
     char *room_type = g_hash_table_lookup(components, ROOM_FIELD_TYPE);
+    char *room_data = g_hash_table_lookup(components, ROOM_FIELD_DATA);
 
     PurpleChat *chat = purple_blist_find_chat(account, room_id);
 
@@ -518,10 +544,16 @@ static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
                                   ROOM_FIELD_TYPE,
                                   ROOM_FIELD_TYPE,
                                   FALSE);
+    PurpleRoomlistField *field_data =
+        purple_roomlist_field_new(PURPLE_ROOMLIST_FIELD_STRING,
+                                  ROOM_FIELD_DATA,
+                                  ROOM_FIELD_DATA,
+                                  FALSE);
 
     GList *fields = NULL;
     fields = g_list_append(fields, field_id);
     fields = g_list_append(fields, field_type);
+    fields = g_list_append(fields, field_data);
 
     purple_roomlist_set_fields(roomlist, fields);
 

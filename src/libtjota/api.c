@@ -38,18 +38,29 @@ tm_request *tm_api_msg_req(const char *room_id)
     return tm_request_new_command_args("msg:req", 1, room_id);
 }
 
+tm_request *tm_api_status_set(const char *status)
+{
+    return tm_request_new_command_args("status:set", 1, status);
+}
+
+tm_request *tm_api_status_req()
+{
+    return tm_request_new_command("status:req");
+}
+
 void tm_api_room_self__handle(int argc, char **argv, void *_callback)
 {
     tm_api_room_self__callback *callback = _callback;
 
-    callback->handle(argv[1], argv[2], argv[3], callback->data);
+    callback->handle(argv[1], argv[2], argv[3], argv[4], callback->data);
 }
 
 tm_handler *tm_api_room_self(tm_api_room_self__callback *callback)
 {
-    return tm_handler_new_regex("room:self any ([^ ]*) '([^']*)' ([^ ]*)",
-                                &tm_api_room_self__handle,
-                                callback);
+    return tm_handler_new_regex(
+            "room:self any ([^ ]*) '([^']*)' ([^ ]*) '([^']*)'",
+            &tm_api_room_self__handle,
+            callback);
 }
 
 void tm_api_room_any__handle(int argc, char **argv, void *_callback)
@@ -80,4 +91,18 @@ tm_handler *tm_api_msg_recv(tm_api_msg_recv__callback *callback)
             "msg:recv any ([^ ]*) ([^ ]*) ([^ ]*) ([^ ]*) '([^']*)'",
             &tm_api_msg_recv__handle,
             callback);
+}
+
+void tm_api_status_recv__handle(int argc, char **argv, void *_callback)
+{
+    tm_api_status_recv__callback *callback = _callback;
+
+    callback->handle(argv[1], argv[2], argv[3], callback->data);
+}
+
+tm_handler *tm_api_status_recv(tm_api_status_recv__callback *callback)
+{
+    return tm_handler_new_regex("status:recv any ([^ ]*) ([^ ]*) '([^']*)'",
+                                &tm_api_status_recv__handle,
+                                callback);
 }
