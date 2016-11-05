@@ -28,6 +28,25 @@ tm_request *tm_api_room_list_room(const char *room_id)
     return tm_request_new_command_args("room:list", 1, room_id);
 }
 
+tm_request *tm_api_room_discover()
+{
+    return tm_request_new_command("room:discover");
+}
+
+tm_request *tm_api_room_create(const char *room_name,
+                               const char *room_type)
+{
+    return tm_request_new_command_args("room:create", 2, room_name, room_type);
+}
+
+tm_request *tm_api_room_create_data(const char *room_name,
+                                    const char *room_type,
+                                    const char *room_data)
+{
+    return tm_request_new_command_args("room:create", 3,
+                                       room_name, room_type, room_data);
+}
+
 tm_request *tm_api_msg_send(const char *room_id, const char *message_data)
 {
     return tm_request_new_command_args("msg:send", 2, room_id, message_data);

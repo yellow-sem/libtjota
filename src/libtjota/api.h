@@ -15,7 +15,11 @@ tm_request *tm_api_auth_check(const char *credential);
 tm_request *tm_api_room_list();
 tm_request *tm_api_room_list_room(const char *room_id);
 tm_request *tm_api_room_discover();
-tm_request *tm_api_room_create(const char *room_name, const char *room_type);
+tm_request *tm_api_room_create(const char *room_name,
+                               const char *room_type);
+tm_request *tm_api_room_create_data(const char *room_name,
+                                    const char *room_type,
+                                    const char *room_data);
 tm_request *tm_api_room_join(const char *room_id);
 tm_request *tm_api_room_invite(const char *room_id,
                                const char *user_credential);

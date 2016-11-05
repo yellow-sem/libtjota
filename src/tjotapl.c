@@ -46,6 +46,9 @@ void tm_on_write(char *data)
     tm_log_write(LOG_DEBUG, "< %s", data);
 }
 
+static void protocol_join_chat(PurpleConnection *conn,
+                               GHashTable *components);
+
 PurpleConversation *get_conversation_for_room(const char *room_id)
 {
     PurpleConversation *conv = NULL;
@@ -111,6 +114,20 @@ gboolean idle_conv_write(void *_idle_conv_write_data)
 
 typedef struct
 {
+    PurpleConnection *conn;
+    GHashTable *components;
+} idle_chat_join_data_t;
+
+gboolean idle_chat_join(void *_idle_chat_join_data)
+{
+    idle_chat_join_data_t *idle_chat_join_data = _idle_chat_join_data;
+
+    protocol_join_chat(idle_chat_join_data->conn,
+                       idle_chat_join_data->components);
+}
+
+typedef struct
+{
     PurpleConversation *conv;
 } idle_conv_destroy_data_t;
 
@@ -151,6 +168,52 @@ void tm_on_auth_login(tm_response *response, void *_account)
     } else {
         purple_connection_set_state(conn, PURPLE_CONNECTING);
     }
+}
+
+typedef struct
+{
+    protocol_data_t *protocol_data;
+
+    const char *room_name;
+    const char *room_type;
+    const char *room_data;
+} room_create_data_t;
+
+void tm_on_room_create(tm_response *response, void *_room_create_data)
+{
+    room_create_data_t *room_create_data = _room_create_data;
+
+    protocol_data_t *protocol_data = room_create_data->protocol_data;
+
+    GHashTable *components = g_hash_table_new_full(g_str_hash,
+                                                   g_str_equal,
+                                                   g_free,
+                                                   g_free);
+
+    g_hash_table_insert(components,
+                        g_strdup(ROOM_FIELD_ID),
+                        g_strdup(response->value));
+    g_hash_table_insert(components,
+                        g_strdup(ROOM_FIELD_NAME),
+                        g_strdup(room_create_data->room_name));
+    g_hash_table_insert(components,
+                        g_strdup(ROOM_FIELD_TYPE),
+                        g_strdup(room_create_data->room_type));
+    g_hash_table_insert(components,
+                        g_strdup(ROOM_FIELD_DATA),
+                        g_strdup(room_create_data->room_data));
+
+    PurpleConnection *conn = protocol_data->conn;
+
+    idle_chat_join_data_t *idle_chat_join_data =
+        malloc(sizeof(idle_chat_join_data_t));
+
+    idle_chat_join_data->conn = conn;
+    idle_chat_join_data->components = components;
+
+    gdk_threads_add_idle(&idle_chat_join, idle_chat_join_data);
+
+    free(room_create_data);
 }
 
 void tm_on_room_self(const char *room_id,
@@ -211,11 +274,6 @@ void tm_on_room_exit(const char *room_id,
     PurpleConnection *conn = protocol_data->conn;
     PurpleAccount *account = purple_connection_get_account(conn);
 
-    PurpleChat *chat = purple_blist_find_chat(account, room_id);
-    if (chat != NULL) {
-        purple_blist_remove_chat(chat);
-    }
-
     PurpleConversation *conv = get_conversation_for_room(room_id);
     if (conv != NULL) {
         idle_conv_destroy_data_t *idle_conv_destroy_data =
@@ -224,6 +282,11 @@ void tm_on_room_exit(const char *room_id,
         idle_conv_destroy_data->conv = conv;
 
         gdk_threads_add_idle(&idle_conv_destroy, idle_conv_destroy_data);
+    }
+
+    PurpleChat *chat = purple_blist_find_chat(account, room_id);
+    if (chat != NULL) {
+        purple_blist_remove_chat(chat);
     }
 }
 
@@ -469,6 +532,33 @@ static void protocol_join_chat(PurpleConnection *conn,
     char *room_type = g_hash_table_lookup(components, ROOM_FIELD_TYPE);
     char *room_data = g_hash_table_lookup(components, ROOM_FIELD_DATA);
 
+    if (room_id == NULL) {
+        return;
+    }
+
+    protocol_data_t *protocol_data = purple_connection_get_protocol_data(conn);
+
+    if (strlen(room_id) == 0) {
+        tm_client *tm_client = protocol_data->tm_client;
+
+        room_create_data_t *room_create_data =
+            malloc(sizeof(room_create_data_t));
+
+        room_create_data->protocol_data = protocol_data;
+
+        room_create_data->room_name = g_strdup(room_name);
+        room_create_data->room_type = g_strdup(room_type);
+        room_create_data->room_data = g_strdup(room_data);
+
+        tm_client_send(tm_client,
+                       tm_api_room_create_data(room_name,
+                                               room_type,
+                                               room_data),
+                       &tm_on_room_create,
+                       room_create_data);
+        return;
+    }
+
     PurpleChat *chat = purple_blist_find_chat(account, room_id);
 
     if (chat == NULL) {
@@ -607,6 +697,11 @@ static PurpleRoomlist *protocol_roomlist_get_list(PurpleConnection *conn)
 
     tm_client_send(tm_client,
                    tm_api_room_list(),
+                   NULL,
+                   NULL);
+
+    tm_client_send(tm_client,
+                   tm_api_room_discover(),
                    NULL,
                    NULL);
 
