@@ -11,7 +11,7 @@ typedef struct
     bool ok;
 } tm_response;
 
-tm_response *tm_response_decode(char *data);
+tm_response *tm_response_parse(char *data);
 void tm_response_free(tm_response *response);
 
 #endif

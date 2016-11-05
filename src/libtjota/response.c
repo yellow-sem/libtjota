@@ -6,7 +6,7 @@
 
 #include "regex.h"
 
-tm_response *tm_response_decode(char *data)
+tm_response *tm_response_parse(char *data)
 {
     tm_response *response = NULL;
 

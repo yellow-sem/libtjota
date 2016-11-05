@@ -14,6 +14,6 @@ tm_request *tm_request_new_command(char *command);
 tm_request *tm_request_new_command_args(char *command, int argc, ...);
 void tm_request_free(tm_request *request);
 
-char *tm_request_encode(tm_request *request);
+char *tm_request_format(tm_request *request);
 
 #endif

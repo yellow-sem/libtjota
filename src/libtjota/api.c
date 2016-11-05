@@ -77,6 +77,20 @@ tm_handler *tm_api_room_any(tm_api_room_any__callback *callback)
                                 callback);
 }
 
+void tm_api_room_exit__handle(int argc, char **argv, void *_callback)
+{
+    tm_api_room_exit__callback *callback = _callback;
+
+    callback->handle(argv[1], callback->data);
+}
+
+tm_handler *tm_api_room_exit(tm_api_room_exit__callback *callback)
+{
+    return tm_handler_new_regex("room:exit any ([^ ]*)",
+                                &tm_api_room_exit__handle,
+                                callback);
+}
+
 void tm_api_msg_recv__handle(int argc, char **argv, void *_callback)
 {
     tm_api_msg_recv__callback *callback = _callback;

@@ -56,7 +56,7 @@ void *tm_client_thread_routine_outgoing(void *_client)
             continue;
         }
 
-        char *data = tm_request_encode(request);
+        char *data = tm_request_format(request);
         tm_conn_write(client->conn, data);
         client->on_write(data);
         free(data);
@@ -85,7 +85,7 @@ void *tm_client_thread_routine_incoming(void *_client)
 
         bool match = tm_handler_handle_all(client->handlers, data);
         if (!match) {
-            tm_response *response = tm_response_decode(data);
+            tm_response *response = tm_response_parse(data);
 
             if (response != NULL) {
                 tm_callback *callback = NULL;

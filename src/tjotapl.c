@@ -96,17 +96,29 @@ typedef struct
     char *who;
     char *message;
     time_t when;
-} write_message_data_t;
+} idle_conv_write_data_t;
 
-gboolean write_message(void *_write_message_data)
+gboolean idle_conv_write(void *_idle_conv_write_data)
 {
-    write_message_data_t *write_message_data = _write_message_data;
+    idle_conv_write_data_t *idle_conv_write_data = _idle_conv_write_data;
 
-    purple_conversation_write(write_message_data->conv,
-                              write_message_data->who,
-                              write_message_data->message,
+    purple_conversation_write(idle_conv_write_data->conv,
+                              idle_conv_write_data->who,
+                              idle_conv_write_data->message,
                               PURPLE_MESSAGE_RECV,
-                              write_message_data->when);
+                              idle_conv_write_data->when);
+}
+
+typedef struct
+{
+    PurpleConversation *conv;
+} idle_conv_destroy_data_t;
+
+gboolean idle_conv_destroy(void *_idle_conv_destroy_data)
+{
+    idle_conv_destroy_data_t *idle_conv_destroy_data = _idle_conv_destroy_data;
+
+    purple_conversation_destroy(idle_conv_destroy_data->conv);
 }
 
 typedef struct {
@@ -114,6 +126,8 @@ typedef struct {
 
     PurpleRoomlist *roomlist;
     GMutex roomlist_mutex;
+
+    PurpleConnection *conn;
 } protocol_data_t;
 
 void tm_on_auth_login(tm_response *response, void *_account)
@@ -189,6 +203,30 @@ void tm_on_room_any(const char *room_id,
     }
 }
 
+void tm_on_room_exit(const char *room_id,
+                     void *_protocol_data)
+{
+    protocol_data_t *protocol_data = _protocol_data;
+
+    PurpleConnection *conn = protocol_data->conn;
+    PurpleAccount *account = purple_connection_get_account(conn);
+
+    PurpleChat *chat = purple_blist_find_chat(account, room_id);
+    if (chat != NULL) {
+        purple_blist_remove_chat(chat);
+    }
+
+    PurpleConversation *conv = get_conversation_for_room(room_id);
+    if (conv != NULL) {
+        idle_conv_destroy_data_t *idle_conv_destroy_data =
+            malloc(sizeof(idle_conv_destroy_data_t));
+
+        idle_conv_destroy_data->conv = conv;
+
+        gdk_threads_add_idle(&idle_conv_destroy, idle_conv_destroy_data);
+    }
+}
+
 void tm_on_msg_recv(const char *room_id,
                     const char *timestamp,
                     const char *user_id,
@@ -200,20 +238,20 @@ void tm_on_msg_recv(const char *room_id,
 
     PurpleConversation *conv = get_conversation_for_room(room_id);
     if (conv != NULL) {
-        write_message_data_t *write_message_data =
-            malloc(sizeof(write_message_data_t));
+        idle_conv_write_data_t *idle_conv_write_data =
+            malloc(sizeof(idle_conv_write_data_t));
 
         time_t when = atol(timestamp) / 1000;
         if (when == 0) {
             when = time(NULL);
         }
 
-        write_message_data->conv = conv;
-        write_message_data->who = g_strdup(user_credential);
-        write_message_data->message = g_strdup(message_data);
-        write_message_data->when = when;
+        idle_conv_write_data->conv = conv;
+        idle_conv_write_data->who = g_strdup(user_credential);
+        idle_conv_write_data->message = g_strdup(message_data);
+        idle_conv_write_data->when = when;
 
-        gdk_threads_add_idle(&write_message, write_message_data);
+        gdk_threads_add_idle(&idle_conv_write, idle_conv_write_data);
     }
 }
 
@@ -235,6 +273,10 @@ tm_handler **tm_handlers_load(protocol_data_t *protocol_data)
     tm_api_room_any__callback.handle = &tm_on_room_any;
     tm_api_room_any__callback.data = protocol_data;
 
+    static tm_api_room_exit__callback tm_api_room_exit__callback;
+    tm_api_room_exit__callback.handle = &tm_on_room_exit;
+    tm_api_room_exit__callback.data = protocol_data;
+
     static tm_api_msg_recv__callback tm_api_msg_recv__callback;
     tm_api_msg_recv__callback.handle = &tm_on_msg_recv;
     tm_api_msg_recv__callback.data = protocol_data;
@@ -243,13 +285,14 @@ tm_handler **tm_handlers_load(protocol_data_t *protocol_data)
     tm_api_status_recv__callback.handle = &tm_on_status_recv;
     tm_api_status_recv__callback.data = protocol_data;
 
-    tm_handler **tm_handlers = malloc(sizeof(tm_handler *) * 5);
+    tm_handler **tm_handlers = malloc(sizeof(tm_handler *) * 6);
 
     tm_handlers[0] = tm_api_room_self(&tm_api_room_self__callback);
     tm_handlers[1] = tm_api_room_any(&tm_api_room_any__callback);
-    tm_handlers[2] = tm_api_msg_recv(&tm_api_msg_recv__callback);
-    tm_handlers[3] = tm_api_status_recv(&tm_api_status_recv__callback);
-    tm_handlers[4] = NULL;
+    tm_handlers[2] = tm_api_room_exit(&tm_api_room_exit__callback);
+    tm_handlers[3] = tm_api_msg_recv(&tm_api_msg_recv__callback);
+    tm_handlers[4] = tm_api_status_recv(&tm_api_status_recv__callback);
+    tm_handlers[5] = NULL;
 
     return tm_handlers;
 }
@@ -359,6 +402,7 @@ static void protocol_login(PurpleAccount *account)
         protocol_data->tm_client = NULL;
         protocol_data->roomlist = NULL;
         g_mutex_init(&protocol_data->roomlist_mutex);
+        protocol_data->conn = conn;
 
         tm_client *tm_client = tm_client_new(tm_conn,
                                              tm_handlers_load(protocol_data),

@@ -55,7 +55,7 @@ void tm_request_free(tm_request *request)
     free(request);
 }
 
-char *tm_request_encode(tm_request *request)
+char *tm_request_format(tm_request *request)
 {
     int argc = 2 + request->argc;
     char **argv = malloc(sizeof(char *) * argc);

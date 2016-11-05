@@ -60,6 +60,17 @@ tm_handler *tm_api_room_any(tm_api_room_any__callback *callback);
 typedef struct
 {
     void (*handle)(const char *room_id,
+                   void *data);
+    void *data;
+} tm_api_room_exit__callback;
+
+void tm_api_room_exit__handle(int argc, char **argv, void *_callback);
+
+tm_handler *tm_api_room_exit(tm_api_room_exit__callback *callback);
+
+typedef struct
+{
+    void (*handle)(const char *room_id,
                    const char *timestamp,
                    const char *user_id,
                    const char *user_credential,
