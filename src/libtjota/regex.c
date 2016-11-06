@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
+#include <glib.h>
 
 regex_t *tm_regex_compile(const char *regex_string)
 {
@@ -29,9 +30,12 @@ char *tm_regex_substr(const char *string, int a, int b)
     return ext;
 }
 
-bool tm_regex_match(regex_t *regex, const char *string,
+bool tm_regex_match(regex_t *regex, char *string,
                     int *argc, char ***argv)
 {
+    gchar **tmp = g_strsplit(string, "\\'", -1);
+    string = g_strjoinv("%quote%", tmp);
+    g_strfreev(tmp);
 
     size_t ngroups = regex->re_nsub + 1;
     regmatch_t *groups = calloc(ngroups, sizeof(regmatch_t));
@@ -43,10 +47,19 @@ bool tm_regex_match(regex_t *regex, const char *string,
     int i;
     char *part;
     for (i = 0; i < ngroups; i++) {
-        part = tm_regex_substr(string, groups[i].rm_so, groups[i].rm_eo);
+        char *_part = tm_regex_substr(string, groups[i].rm_so, groups[i].rm_eo);
+
+        tmp = g_strsplit(_part, "%quote%", -1);
+        part = g_strjoinv("'", tmp);
+        g_strfreev(tmp);
+
+        free(_part);
+
         (*argv)[i] = part;
         result &= strlen(part) > 0;
     }
+
+    g_free(string);
 
     *argc = ngroups;
 
