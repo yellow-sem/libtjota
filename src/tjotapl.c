@@ -228,16 +228,35 @@ void tm_on_room_self(const char *room_id,
 
     PurpleRoomlist *roomlist = protocol_data->roomlist;
 
-    PurpleRoomlistRoom *room =
-        purple_roomlist_room_new(PURPLE_ROOMLIST_ROOMTYPE_ROOM,
-                                 g_strdup(room_name),
-                                 NULL);
+    bool exists = false;
 
-    purple_roomlist_room_add_field(roomlist, room, room_id);
-    purple_roomlist_room_add_field(roomlist, room, room_type);
-    purple_roomlist_room_add_field(roomlist, room, room_data);
+    GList *rooms = roomlist->rooms;
+    while (rooms != NULL) {
+        PurpleRoomlistRoom *room = rooms->data;
 
-    purple_roomlist_room_add(roomlist, room);
+        GList *fields = purple_roomlist_room_get_fields(room);
+        while (fields != NULL) {
+            if (strcmp(fields->data, room_id) == 0) {
+                exists = true;
+            }
+            fields = fields->next;
+        }
+
+        rooms = rooms->next;
+    }
+
+    if (!exists) {
+        PurpleRoomlistRoom *room =
+            purple_roomlist_room_new(PURPLE_ROOMLIST_ROOMTYPE_ROOM,
+                                     g_strdup(room_name),
+                                     NULL);
+
+        purple_roomlist_room_add_field(roomlist, room, room_id);
+        purple_roomlist_room_add_field(roomlist, room, room_type);
+        purple_roomlist_room_add_field(roomlist, room, room_data);
+
+        purple_roomlist_room_add(roomlist, room);
+    }
 
     purple_roomlist_set_in_progress(roomlist, FALSE);
 
