@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h>
+#include <glib.h>
 
 #include "string.h"
 
@@ -66,12 +66,16 @@ char *tm_request_format(tm_request *request)
     int i;
 
     for (i = 0; i < request->argc; i++) {
-        char *arg = request->argv[i];
+        gchar **tmp = g_strsplit(request->argv[i], "'", -1);
+        char *arg = g_strjoinv("\\'", tmp);
+        g_strfreev(tmp);
 
         char *argq = malloc(2 + strlen(arg) + 1);
         sprintf(argq, "'%s'", arg);
 
         argv[2 + i] = argq;
+
+        g_free(arg);
     }
 
     char *data = tm_string_join(" ", argc, argv);

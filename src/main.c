@@ -8,7 +8,7 @@
 #include "libtjota/client.h"
 #include "libtjota/api.h"
 
-static const char *TEST_SESSION_ID = "fcd3fa2f-947c-400b-9f32-55729370fa00";
+static const char *TEST_SESSION_ID = "097c2dcf-791c-4757-b650-23820e12aa6d";
 
 void tm_on_read(char *data)
 {
@@ -43,6 +43,7 @@ void tm_on_sys_exit(tm_response *response, void *data)
 void tm_on_room_self(const char *room_id,
                      const char *room_name,
                      const char *room_type,
+                     const char *room_data,
                      void *data)
 {
     printf("joined room %s name='%s' type=%s\n",
